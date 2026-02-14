@@ -30,17 +30,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the Unii binary sensor platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     
-    # We first need to discover how many inputs exist.
-    # For now, we poll input status once to discover entities.
-    # In a full impl, we'd use Input Arrangement (0x0140).
-    # We'll start by assuming a reasonable range or using what's in the status.
-    
     await coordinator.async_config_entry_first_refresh()
     
     entities = []
-    # If the coordinator has input data, create sensors
     if coordinator.data and "inputs" in coordinator.data:
-        for input_id in coordinator.data["inputs"]:
+        for input_id, record in coordinator.data["inputs"].items():
             entities.append(UniiInputBinarySensor(coordinator, input_id))
             entities.append(UniiTamperBinarySensor(coordinator, input_id))
             
@@ -52,7 +46,10 @@ class UniiInputBinarySensor(CoordinatorEntity, BinarySensorEntity):
     def __init__(self, coordinator, input_id):
         super().__init__(coordinator)
         self._input_id = input_id
-        self._attr_name = f"Unii Input {input_id}"
+        # Get name from current data or arrangement
+        record = coordinator.data.get("inputs", {}).get(input_id, {})
+        name = record.get("name", f"Input {input_id}")
+        self._attr_name = name
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_input_{input_id}"
         self._attr_device_class = BinarySensorDeviceClass.MOTION
         
@@ -64,7 +61,8 @@ class UniiInputBinarySensor(CoordinatorEntity, BinarySensorEntity):
         status_record = self.coordinator.data["inputs"].get(self._input_id)
         if not status_record:
             return False
-        # Bit 0 of status is ALARM/OPEN (0x01)
+        # Bit 0 is Open/Alarm. 
+        # Note: 0x00 is OK, 0x01 is ALARM.
         return (status_record["status"] & 0x01) == 0x01
 
     @property
@@ -88,7 +86,9 @@ class UniiTamperBinarySensor(CoordinatorEntity, BinarySensorEntity):
     def __init__(self, coordinator, input_id):
         super().__init__(coordinator)
         self._input_id = input_id
-        self._attr_name = f"Unii Input {input_id} Tamper"
+        record = coordinator.data.get("inputs", {}).get(input_id, {})
+        name = record.get("name", f"Input {input_id}")
+        self._attr_name = f"{name} Tamper"
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_input_{input_id}_tamper"
         self._attr_device_class = BinarySensorDeviceClass.TAMPER
         self._attr_entity_category = "diagnostic"

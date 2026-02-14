@@ -29,7 +29,7 @@ from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Unii from a config entry."""
@@ -41,6 +41,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     client = UniiClient(host, port, shared_key)
     
+    # Fetch Input Arrangement (Metadata) once
+    input_arrangement = {}
+    try:
+        if await client.connect():
+            resp = await client.get_input_arrangement(0)
+            if resp:
+                input_arrangement = resp.get("inputs", {})
+    except Exception as e:
+        _LOGGER.warning(f"Could not fetch input arrangement: {e}")
+
     async def async_update_data():
         """Fetch data from Unii."""
         try:
@@ -54,7 +64,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             data = {"sections": {}, "inputs": {}}
             
             if section_resp and section_resp.get("command") == 0x0117:
-                # Parse section data (each 2 bytes: ID, State)
                 raw_data = section_resp["data"]
                 for i in range(0, len(raw_data), 2):
                     s_id = raw_data[i]
@@ -62,17 +71,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     data["sections"][s_id] = s_state
             
             if input_resp and input_resp.get("command") == 0x0105:
-                # Parse input data (Version 2 response)
-                # [Version (1)][Block (2)][Data...]
                 raw_data = input_resp["data"]
-                # According to py-unii, version is at [1], data starts at [2]
-                # Each byte is an InputStatusRecord
                 for i, status_byte in enumerate(raw_data[2:]):
-                    input_id = i + 1 # simplistic mapping for now
+                    input_id = i + 1
+                    # Only include programmed inputs or those with active status
+                    status = status_byte & 0x0F
+                    if status == 0x0F: # Disabled
+                        continue
+                        
                     data["inputs"][input_id] = {
-                        "status": status_byte & 0x0F,
+                        "status": status,
                         "bypassed": bool(status_byte & 0x10),
                         "low_battery": bool(status_byte & 0x40),
+                        "name": input_arrangement.get(input_id, {}).get("name", f"Input {input_id}")
                     }
             
             return data
@@ -86,6 +97,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_method=async_update_data,
         update_interval=timedelta(seconds=5),
     )
+    coordinator.input_arrangement = input_arrangement # Save for platforms
 
     await coordinator.async_config_entry_first_refresh()
 
