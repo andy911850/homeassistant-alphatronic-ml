@@ -57,6 +57,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if not await client.connect():
                 raise UpdateFailed("Failed to connect to Unii panel")
             
+            # Retry fetching arrangement if missing
+            if not coordinator.input_arrangement:
+                 _LOGGER.debug("Input arrangement missing, attempting to fetch...")
+                 arr_res = await client.get_input_arrangement()
+                 if arr_res:
+                     coordinator.input_arrangement = arr_res.get("inputs", {})
+                     _LOGGER.debug(f"Fetched arrangement for {len(coordinator.input_arrangement)} inputs.")
+            
             # Poll Sections and Inputs
             section_resp = await client.get_status()
             input_resp = await client.get_input_status()
@@ -76,14 +84,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 for i, status_byte in enumerate(raw_data[2:]):
                     input_id = i + 1
                     
-                    info = input_arrangement.get(input_id)
-                    if not info:
-                        continue
+                    info = coordinator.input_arrangement.get(input_id)
                     
-                    stype = info.get("sensor_type", 0)
-                    # Filter: Hide NOT_ACTIVE (0), TECHNICAL (8), DIRECT_DIALER (9)
-                    if stype in [0, 8, 9]:
-                        continue
+                    # Filter: Only hide if explicitly KNOWN to be Type 0, 8, or 9.
+                    # If info is missing (None), we assume it's a valid inputs and show it (Generic)
+                    if info:
+                        stype = info.get("sensor_type", 0)
+                        if stype in [0, 8, 9]:
+                            continue
+                        name = info.get("name", f"Input {input_id}")
+                    else:
+                        # Fallback for unknown inputs: Show them!
+                        # But maybe filter if status is disabled?
+                        name = f"Input {input_id}"
+                        stype = None # Unknown
                         
                     status = status_byte & 0x0F
                     if status == 0x0F: # Disabled status
@@ -93,7 +107,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         "status": status,
                         "bypassed": bool(status_byte & 0x10),
                         "low_battery": bool(status_byte & 0x40),
-                        "name": info.get("name", f"Input {input_id}"),
+                        "name": name,
                         "sensor_type": stype,
                     }
             
@@ -108,7 +122,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_method=async_update_data,
         update_interval=timedelta(seconds=5),
     )
-    coordinator.client = client # Direct access to fix __self__ error
+    coordinator.client = client 
     coordinator.input_arrangement = input_arrangement
 
     await coordinator.async_config_entry_first_refresh()
