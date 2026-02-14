@@ -232,52 +232,68 @@ class UniiClient:
                 return await self._recv_response(expected_cmd=0x0105)
             return None
 
-    async def get_input_arrangement(self, block=0):
-        async with self._transaction_lock:
+    async def get_input_arrangement(self):
+        """Fetch input arrangement (all blocks)."""
+        inputs = {}
+        block = 0
+        
+        # Loop to fetch all blocks
+        while True:
+            block += 1
             # Request Input Arrangement (0x0140)
-            # Version 2 | Block Number (2b)
-            payload = b'\x02' + struct.pack(">H", block)
-            if await self._send_command(0x0140, payload):
-                resp = await self._recv_response(expected_cmd=0x0141)
-                if not resp:
-                    return None
-                
-                data = resp['data']
-                version = data[1] # wait, message is: cmd(2)|len(2)|data... but _recv_req parses it
-                # resp['data'] starts AFTER the cmd/len. So data[0] is version? 
-                # py-unii says data[1] is version. Let's check _recv_response
-                # cmd_id = struct.unpack(">H", payload_dec[:2])[0]
-                # data_len = struct.unpack(">H", payload_dec[2:4])[0]
-                # data = payload_dec[4:4+data_len]
-                # If py-unii says data[1] is version, then the data block starts with some overhead.
-                # Actually, MLIP headers usually have Version at offset 0 of the data.
-                
-                inputs = {}
-                offset = 4 # Skip Version(1), Reserved(1), Block(2)
-                while offset < len(data):
-                    if offset + 5 > len(data): break
-                    input_num = struct.unpack(">H", data[offset:offset+2])[0]
-                    sensor_type = data[offset+2]
-                    reaction = data[offset+3]
-                    name_len = data[offset+4]
+            # Payload: Block Number (2b) ONLY (No version byte in request)
+            payload = struct.pack(">H", block)
+            
+            async with self._transaction_lock:
+                if await self._send_command(0x0140, payload):
+                    resp = await self._recv_response(expected_cmd=0x0141)
+                    if not resp:
+                        break
                     
-                    if offset + 5 + name_len + 4 > len(data): break
+                    data = resp['data']
+                    # Response: Cmd(2)|Len(2)|Version(1)|Block(2)|Inputs...
+                    # _recv_response returns data payload starting at Version
                     
-                    name_raw = data[offset+5:offset+5+name_len]
-                    name = name_raw.decode("latin-1").strip()
+                    if len(data) < 3:
+                        break
+                        
+                    version = data[0] # Should be 2
+                    # resp_block = struct.unpack(">H", data[1:3])[0]
                     
-                    # Sections (4 bytes)
-                    # For now just store the basic info
-                    inputs[input_num] = {
-                        "name": name,
-                        "sensor_type": sensor_type,
-                        "reaction": reaction
-                    }
+                    # Parse Inputs
+                    offset = 3 # Skip Version(1), Block(2)
+                    found_in_block = False
                     
-                    offset += 9 + name_len
+                    while offset < len(data):
+                        # Each Input Chunk: Number(2)|Type(1)|Reaction(1)|NameLen(1)|Name(N)|Sections(4)
+                        if offset + 5 > len(data): break
+                        
+                        input_num = struct.unpack(">H", data[offset:offset+2])[0]
+                        sensor_type = data[offset+2]
+                        reaction = data[offset+3]
+                        name_len = data[offset+4]
+                        
+                        if offset + 5 + name_len + 4 > len(data): break
+                        
+                        name_raw = data[offset+5:offset+5+name_len]
+                        name = name_raw.decode("utf-8", errors="replace").strip() # Original uses decode_and_strip utf-8
+                        
+                        # Store
+                        inputs[input_num] = {
+                            "name": name,
+                            "sensor_type": sensor_type,
+                            "reaction": reaction
+                        }
+                        
+                        offset += 9 + name_len
+                        found_in_block = True
                     
-                return {"block": block, "inputs": inputs}
-            return None
+                    if not found_in_block:
+                        break
+                else:
+                    break
+                    
+        return {"inputs": inputs}
 
     async def bypass_input(self, input_id, user_code):
         async with self._transaction_lock:

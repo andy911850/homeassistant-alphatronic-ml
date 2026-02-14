@@ -86,18 +86,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     
                     info = coordinator.input_arrangement.get(input_id)
                     
-                    # Filter: Only hide if explicitly KNOWN to be Type 0, 8, or 9.
-                    # If info is missing (None), we assume it's a valid inputs and show it (Generic)
-                    if info:
-                        stype = info.get("sensor_type", 0)
-                        if stype in [0, 8, 9]:
-                            continue
-                        name = info.get("name", f"Input {input_id}")
-                    else:
-                        # Fallback for unknown inputs: Show them!
-                        # But maybe filter if status is disabled?
-                        name = f"Input {input_id}"
-                        stype = None # Unknown
+                    # Strict Filter: Must be in arrangement AND not Type 0/8/9
+                    if not info:
+                        continue
+                        
+                    stype = info.get("sensor_type", 0)
+                    if stype in [0, 8, 9]:
+                        continue
                         
                     status = status_byte & 0x0F
                     if status == 0x0F: # Disabled status
@@ -107,7 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         "status": status,
                         "bypassed": bool(status_byte & 0x10),
                         "low_battery": bool(status_byte & 0x40),
-                        "name": name,
+                        "name": info.get("name", f"Input {input_id}"),
                         "sensor_type": stype,
                     }
             
