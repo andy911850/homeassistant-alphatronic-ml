@@ -18,35 +18,57 @@ class UniiClient:
         self.tx_seq = 0
         self.rx_seq = 0
         self._connected = False
+        self._lock = asyncio.Lock()
+        self._transaction_lock = asyncio.Lock()
         
     async def connect(self):
-        _LOGGER.info(f"Connecting to {self.ip}:{self.port}...")
-        try:
-            self.reader, self.writer = await asyncio.open_connection(self.ip, self.port)
-            self._connected = True
-            
-            # Handshake
-            if await self._send_command(0x0001): # CONNECTION_REQUEST
-                resp = await self._recv_response()
-                if resp and resp['command'] == 0x0002: # CONNECTION_REQUEST_RESPONSE
-                    _LOGGER.info("Connected and Authenticated!")
+        async with self._lock:
+            if self._connected and self.writer:
+                # Check if connection is still alive
+                try:
+                    # Test write
+                    # No easy way to test without sending a command, 
+                    # but let's assume it's okay unless we get an error elsewhere.
                     return True
-            return False
-        except Exception as e:
-            _LOGGER.error(f"Connection failed: {e}")
-            self._connected = False
-            return False
+                except Exception:
+                    self._connected = False
+
+            _LOGGER.info(f"Connecting to {self.ip}:{self.port}...")
+            try:
+                self.reader, self.writer = await asyncio.open_connection(self.ip, self.port)
+                
+                # Handshake
+                if await self._send_command(0x0001): # CONNECTION_REQUEST
+                    resp = await self._recv_response()
+                    if resp and resp['command'] == 0x0002: # CONNECTION_REQUEST_RESPONSE
+                        _LOGGER.info("Connected and Authenticated!")
+                        self._connected = True
+                        return True
+                        
+                # If handshake failed
+                if self.writer:
+                    self.writer.close()
+                self._connected = False
+                return False
+            except Exception as e:
+                _LOGGER.error(f"Connection failed: {e}")
+                self._connected = False
+                return False
 
     async def disconnect(self):
-        if self.writer:
-            self.writer.close()
-            try:
-                await self.writer.wait_closed()
-            except Exception:
-                pass
+        async with self._lock:
+            if self.writer:
+                try:
+                    self.writer.close()
+                    await self.writer.wait_closed()
+                except Exception:
+                    pass
             self.writer = None
             self.reader = None
             self._connected = False
+            self.session_id = 0xFFFF
+            self.tx_seq = 0
+            self.rx_seq = 0
             _LOGGER.info("Disconnected.")
 
     def _encrypt(self, payload, header):
@@ -177,40 +199,46 @@ class UniiClient:
             return None
 
     async def get_status(self):
-        _LOGGER.debug("Requesting Section Status...")
-        mask = bytes(range(1, 33)) 
-        await self._send_command(0x0116, mask)
-        # Expected Response: 0x0117 (RESPONSE_REQUEST_SECTION_STATUS)
-        return await self._recv_response(expected_cmd=0x0117)
+        async with self._transaction_lock:
+            _LOGGER.debug("Requesting Section Status...")
+            mask = bytes(range(1, 33)) 
+            if await self._send_command(0x0116, mask):
+                # Expected Response: 0x0117 (RESPONSE_REQUEST_SECTION_STATUS)
+                return await self._recv_response(expected_cmd=0x0117)
+            return None
         
     def _bcd_encode(self, data):
-        s = data
+        s = str(data) # Ensure string
         while len(s) < 16:
             s += "0"
         return bytes.fromhex(s)
 
     async def arm_section(self, section_id, user_code):
-        _LOGGER.info(f"Arming Section {section_id}...")
-        
-        payload = bytearray()
-        payload.append(0x00)
-        payload.extend(self._bcd_encode(user_code))
-        payload.append(section_id)
-        payload.append(0x01)
-        
-        await self._send_command(0x0112, payload)
-        # Expected: 0x0113
-        return await self._recv_response(expected_cmd=0x0113)
-        
+        async with self._transaction_lock:
+            _LOGGER.info(f"Arming Section {section_id}...")
+            
+            payload = bytearray()
+            payload.append(0x00)
+            payload.extend(self._bcd_encode(user_code))
+            payload.append(section_id)
+            payload.append(0x01)
+            
+            if await self._send_command(0x0112, payload):
+                # Expected: 0x0113
+                return await self._recv_response(expected_cmd=0x0113)
+            return None
+            
     async def disarm_section(self, section_id, user_code):
-        _LOGGER.info(f"Disarming Section {section_id}...")
-        
-        payload = bytearray()
-        payload.append(0x00)
-        payload.extend(self._bcd_encode(user_code))
-        payload.append(section_id)
-        payload.append(0x01)
-        
-        await self._send_command(0x0114, payload)
-        # Expected: 0x0115
-        return await self._recv_response(expected_cmd=0x0115)
+        async with self._transaction_lock:
+            _LOGGER.info(f"Disarming Section {section_id}...")
+            
+            payload = bytearray()
+            payload.append(0x00)
+            payload.extend(self._bcd_encode(user_code))
+            payload.append(section_id)
+            payload.append(0x01)
+            
+            if await self._send_command(0x0114, payload):
+                # Expected: 0x0115
+                return await self._recv_response(expected_cmd=0x0115)
+            return None
