@@ -23,6 +23,19 @@ This is a standalone, performance-optimized Home Assistant custom component for 
     *   **DataUpdateCoordinator**: Centrally manages all communication in a background task to prevent UI lag.
     *   **Async/Await**: Fast, non-blocking I/O keeps Home Assistant responsive.
 
+## Panel Configuration
+
+To allow this integration to communicate with your alarm panel, you must configure the **General Interface** settings using the **AlphaTool** software.
+
+1.  Open **AlphaTool** and connect to your panel.
+2.  Navigate to **General Interface** settings.
+3.  Configure the following settings:
+    *   **Interface**: `Basic encryption`
+    *   **Transport Protocol**: `TCP`
+    *   **Port**: `6502`
+    *   **Encryption key**: Enter an 8-character key (e.g., `12345678`). You will need this key during the Home Assistant setup.
+    *   **Refresh rate**: `1s` (Required for fastest input response).
+
 ## Installation
 
 1.  **HACS (Recommended)**:
