@@ -217,17 +217,53 @@ class UniiClient:
 
     async def get_status(self):
         async with self._transaction_lock:
-            _LOGGER.debug("Requesting Section Status...")
-            mask = bytes(range(1, 33)) 
-            if await self._send_command(0x0116, mask):
-                # Expected Response: 0x0117 (RESPONSE_REQUEST_SECTION_STATUS)
+            # Request Section Status (0x0116)
+            # Mask for all potential sections
+            mask = bytes([0xFF] * 4) # 32 bits for 32 sections
+            if await self._send_command(0x0116, b'\x01' + mask): # Version 1 + mask
                 return await self._recv_response(expected_cmd=0x0117)
+            return None
+
+    async def get_input_status(self):
+        async with self._transaction_lock:
+            # Request Input Status (0x0106)
+            # Version 2 (based on py-unii)
+            if await self._send_command(0x0106, b'\x02'):
+                return await self._recv_response(expected_cmd=0x0105)
+            return None
+
+    async def bypass_input(self, input_id, user_code):
+        async with self._transaction_lock:
+            # Request to Bypass an Input (0x0118)
+            # Mode (0x00 = User Code) | Code (8b BCD) | InputID (2b)
+            payload = bytearray([0x00])
+            payload.extend(self._bcd_encode_v2(user_code))
+            payload.extend(struct.pack(">H", input_id))
+            if await self._send_command(0x0118, payload):
+                return await self._recv_response(expected_cmd=0x0119)
+            return None
+
+    async def unbypass_input(self, input_id, user_code):
+        async with self._transaction_lock:
+            # Request to Unbypass an Input (0x011A)
+            payload = bytearray([0x00])
+            payload.extend(self._bcd_encode_v2(user_code))
+            payload.extend(struct.pack(">H", input_id))
+            if await self._send_command(0x011A, payload):
+                return await self._recv_response(expected_cmd=0x011B)
             return None
         
     def _bcd_encode(self, data):
-        s = str(data) # Ensure string
+        # Original 16-digit version for arm/disarm
+        s = str(data)
         while len(s) < 16:
             s += "0"
+        return bytes.fromhex(s)
+
+    def _bcd_encode_v2(self, data):
+        # 8-digit version for bypass
+        code_str = str(data)
+        s = code_str[:8].ljust(8, "0")
         return bytes.fromhex(s)
 
     async def arm_section(self, section_id, user_code):

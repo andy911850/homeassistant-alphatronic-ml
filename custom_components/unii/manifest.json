@@ -1,14 +1,15 @@
 {
   "domain": "unii",
-  "name": "AlphaVision Unii Custom",
+  "name": "Alphatronics UNii (Custom)",
   "codeowners": [
-    "@spijker"
+    "@andy911850"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/andy911850/homeassistant-alphatronic-ml",
+  "documentation": "https://github.com/andy911850/homeassistant-unii-custom",
   "requirements": [
-    "pycryptodome>=3.0.0"
+    "pycryptodome>=3.19.0"
   ],
   "iot_class": "local_polling",
-  "version": "1.0.6"
+  "version": "1.1.0",
+  "issue_tracker": "https://github.com/andy911850/homeassistant-unii-custom/issues"
 }
