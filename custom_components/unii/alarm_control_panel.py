@@ -7,17 +7,12 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityFeature,
+    AlarmControlPanelState,
     CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    STATE_ALARM_ARMED_AWAY,
-    STATE_ALARM_DISARMED,
-    STATE_ALARM_ARMING,
-    STATE_ALARM_DISARMING,
     STATE_UNAVAILABLE,
-    STATE_ALARM_TRIGGERED,
-    STATE_ALARM_PENDING,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -53,7 +48,7 @@ class UniiAlarm(AlarmControlPanelEntity):
         self._state = None
 
     @property
-    def state(self) -> str | None:
+    def alarm_state(self) -> AlarmControlPanelState | None:
         """Return the state of the device."""
         return self._state
 
@@ -63,14 +58,14 @@ class UniiAlarm(AlarmControlPanelEntity):
             _LOGGER.error("No code provided for disarm")
             return
             
-        self._state = STATE_ALARM_DISARMING
+        self._state = AlarmControlPanelState.DISARMING
         self.async_write_ha_state()
         
         # We assume Section 1 for now
         resp = await self.client.disarm_section(1, code)
         if resp and resp['command'] == 0x0115:
             # Success, update will fetch new state naturally, but we can optimistically set it
-            self._state = STATE_ALARM_DISARMED
+            self._state = AlarmControlPanelState.DISARMED
         else:
              _LOGGER.error("Disarm command failed")
              # Revert? or let update handle it
@@ -81,12 +76,12 @@ class UniiAlarm(AlarmControlPanelEntity):
             _LOGGER.error("No code provided for arm")
             return
 
-        self._state = STATE_ALARM_ARMING
+        self._state = AlarmControlPanelState.ARMING
         self.async_write_ha_state()
 
         resp = await self.client.arm_section(1, code)
         if resp and resp['command'] == 0x0113:
-             self._state = STATE_ALARM_ARMED_AWAY
+             self._state = AlarmControlPanelState.ARMED_AWAY
         else:
              _LOGGER.error("Arm command failed")
 
@@ -114,19 +109,19 @@ class UniiAlarm(AlarmControlPanelEntity):
                     
                     if sec_num == 1: # We only care about Section 1 for now
                         if sec_state == 1:
-                            self._state = STATE_ALARM_ARMED_AWAY
+                            self._state = AlarmControlPanelState.ARMED_AWAY
                         elif sec_state == 2:
-                            self._state = STATE_ALARM_DISARMED
+                            self._state = AlarmControlPanelState.DISARMED
                         elif sec_state == 7:
-                             self._state = STATE_ALARM_TRIGGERED
+                             self._state = AlarmControlPanelState.TRIGGERED
                         else:
                              # 8=Exit Timer, 9=Entry Timer
                              if sec_state == 8:
-                                 self._state = STATE_ALARM_ARMING
+                                 self._state = AlarmControlPanelState.ARMING
                              elif sec_state == 9:
-                                 self._state = STATE_ALARM_PENDING
+                                 self._state = AlarmControlPanelState.PENDING
                              else:
-                                 self._state = STATE_ALARM_DISARMED # Unknown fallback
+                                 self._state = AlarmControlPanelState.DISARMED # Unknown fallback
                         break
         except Exception as e:
             _LOGGER.error(f"Update failed: {e}")
