@@ -51,6 +51,16 @@ To allow this integration to communicate with your alarm panel, you must configu
     *   Click **Add Integration** and search for **UNii**.
     *   Enter your **Panel IP**, **Port** (6502), and **Shared Key** (if "Basic Encryption" is enabled in AlphaTool).
 
+## Troubleshooting
+
+### Connection Failed (Errno 110 / WinError 121)
+If you see a "Connection failed" error or the integration fails to add:
+1.  **Close AlphaTool**: The panel only supports **one** connection. If AlphaTool is open, Home Assistant cannot connect.
+2.  **Hard Reboot Panel**: The panel's network interface may freeze.
+    *   Disconnect **AC Power** and **Battery**.
+    *   Wait **10-15 seconds**.
+    *   Reconnect power.
+
 ## Requirements
 
 *   **pycryptodome**: Automatically installed as a dependency.
