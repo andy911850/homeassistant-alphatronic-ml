@@ -1,12 +1,3 @@
-# AlphaVision Unii Custom Component
-
-This is a standalone Home Assistant integration for AlphaVision Unii alarms, using a reverse-engineered TCP protocol (Port 6502).
-
-## Installation
-
-1.  Copy the `custom_components/unii` folder to your Home Assistant's `config/custom_components/` directory.
-2.  Restart Home Assistant.
-3.  Go to **Settings > Devices & Services**.
 4.  Click **Add Integration** and search for **Unii Alarm**.
 5.  Enter your Alarm IP, Port (6502), and Shared Key.
 
