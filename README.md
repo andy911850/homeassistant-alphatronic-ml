@@ -2,8 +2,9 @@
 
 This is a standalone, performance-optimized Home Assistant custom component for the **Alphatronics UNii** alarm system. It communicates via the local network (Port 6502) using a reverse-engineered binary protocol with AES-CTR encryption support.
 
-## v1.2.1 Features
+## v1.2.3 Features
 
+*   **Robust Protocol**: Corrected implementation of the UNii communication protocol (Input Arrangement), ensuring reliable connection even with complex panel configurations.
 *   **Multi-Section Support**: Control individual alarm sections (e.g., Section 1, Section 2) independently.
 *   **Master Control**: A composite Alarm Control Panel entity that monitors and controls the entire system.
 *   **Intelligent Zone Monitoring**:
