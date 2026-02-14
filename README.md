@@ -17,3 +17,12 @@ This is a standalone Home Assistant integration for AlphaVision Unii alarms, usi
 
 ## Requirements
 *   Encryption support is handled automatically (Python dependencies are defined in `manifest.json`).
+
+## Acknowledgments & License
+
+This project is a modified version of the original [homeassistant-unii](https://github.com/unii-security/homeassistant-unii) integration by `unii-security`.
+
+This software is licensed under the **Apache License 2.0**. See the `LICENSE` file for details.
+
+---
+*Modified by andy911850 (2026)*
