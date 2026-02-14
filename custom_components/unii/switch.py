@@ -33,8 +33,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     entities = []
     if coordinator.data and "inputs" in coordinator.data:
-        for input_id in coordinator.data["inputs"]:
-            entities.append(UniiBypassSwitch(coordinator, input_id))
+        for input_id, record in coordinator.data["inputs"].items():
+            # Only create bypass switches for Burglary (1) or Glassbreak (15)
+            stype = record.get("sensor_type")
+            if stype in [1, 15]: 
+                entities.append(UniiBypassSwitch(coordinator, input_id))
             
     async_add_entities(entities)
 
@@ -70,13 +73,13 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
         _LOGGER.warning("Bypass requires a user code. Attempting with default if available.")
         # Placeholder for code retrieval
         code = "1234" # Should be configurable
-        client = self.coordinator.update_method.__self__.__dict__['client']
+        client = self.coordinator.client
         await client.bypass_input(self._input_id, code)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Unbypass the input."""
         code = "1234" # Should be configurable
-        client = self.coordinator.update_method.__self__.__dict__['client']
+        client = self.coordinator.client
         await client.unbypass_input(self._input_id, code)
         await self.coordinator.async_request_refresh()

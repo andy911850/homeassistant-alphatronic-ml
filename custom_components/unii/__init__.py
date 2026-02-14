@@ -66,6 +66,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if section_resp and section_resp.get("command") == 0x0117:
                 raw_data = section_resp["data"]
                 for i in range(0, len(raw_data), 2):
+                    if i+1 >= len(raw_data): break
                     s_id = raw_data[i]
                     s_state = raw_data[i+1]
                     data["sections"][s_id] = s_state
@@ -74,16 +75,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 raw_data = input_resp["data"]
                 for i, status_byte in enumerate(raw_data[2:]):
                     input_id = i + 1
-                    # Only include programmed inputs or those with active status
+                    
+                    info = input_arrangement.get(input_id)
+                    if not info:
+                        continue
+                    
+                    stype = info.get("sensor_type", 0)
+                    # Filter: Hide NOT_ACTIVE (0), TECHNICAL (8), DIRECT_DIALER (9)
+                    if stype in [0, 8, 9]:
+                        continue
+                        
                     status = status_byte & 0x0F
-                    if status == 0x0F: # Disabled
+                    if status == 0x0F: # Disabled status
                         continue
                         
                     data["inputs"][input_id] = {
                         "status": status,
                         "bypassed": bool(status_byte & 0x10),
                         "low_battery": bool(status_byte & 0x40),
-                        "name": input_arrangement.get(input_id, {}).get("name", f"Input {input_id}")
+                        "name": info.get("name", f"Input {input_id}"),
+                        "sensor_type": stype,
                     }
             
             return data
@@ -97,7 +108,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_method=async_update_data,
         update_interval=timedelta(seconds=5),
     )
-    coordinator.input_arrangement = input_arrangement # Save for platforms
+    coordinator.client = client # Direct access to fix __self__ error
+    coordinator.input_arrangement = input_arrangement
 
     await coordinator.async_config_entry_first_refresh()
 

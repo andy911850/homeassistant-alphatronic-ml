@@ -93,7 +93,7 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         """Send disarm command for this section."""
         if not code:
             return
-        client = self.coordinator.update_method.__self__.__dict__['client']
+        client = self.coordinator.client
         await client.disarm_section(self.section_id, code)
         await self.coordinator.async_request_refresh()
 
@@ -101,7 +101,7 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         """Send arm away command for this section."""
         if not code:
             return
-        client = self.coordinator.update_method.__self__.__dict__['client']
+        client = self.coordinator.client
         await client.arm_section(self.section_id, code)
         await self.coordinator.async_request_refresh()
 
@@ -146,14 +146,14 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Send disarm command to all sections."""
-        client = self.coordinator.update_method.__self__.__dict__['client']
+        client = self.coordinator.client
         for sid in self.section_ids:
             await client.disarm_section(sid, code)
         await self.coordinator.async_request_refresh()
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Send arm away command to all sections."""
-        client = self.coordinator.update_method.__self__.__dict__['client']
+        client = self.coordinator.client
         for sid in self.section_ids:
             await client.arm_section(sid, code)
         await self.coordinator.async_request_refresh()
