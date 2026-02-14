@@ -5,11 +5,11 @@
     "@andy911850"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/andy911850/homeassistant-unii-custom",
+  "documentation": "https://github.com/andy911850/homeassistant-alphatronic-ml",
   "requirements": [
     "pycryptodome>=3.19.0"
   ],
   "iot_class": "local_polling",
   "version": "1.1.0",
-  "issue_tracker": "https://github.com/andy911850/homeassistant-unii-custom/issues"
+  "issue_tracker": "https://github.com/andy911850/homeassistant-alphatronic-ml/issues"
 }
