@@ -37,6 +37,9 @@ async def async_setup_entry(
     """Set up Unii alarm control panel from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     
+    # Log the actual state mapping to verify correct code is loaded
+    _LOGGER.warning(f"STATE MAP: 1={SECTION_STATE_MAP[1]}, 2={SECTION_STATE_MAP[2]}")
+    
     # Hardcoded Section 1, Section 2, and Master
     sections = [
         UniiAlarm(coordinator, 1, "Section 1", entry),
@@ -96,6 +99,9 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         if mapped is None:
             _LOGGER.warning(f"Section {self.section_id}: Unknown state value {sec_state}, defaulting to DISARMED")
             return AlarmControlPanelState.DISARMED
+        
+        if self.section_id == 1:
+            _LOGGER.debug(f"Section 1: raw={sec_state} -> mapped={mapped}")
         
         return mapped
 
