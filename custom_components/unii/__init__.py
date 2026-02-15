@@ -29,7 +29,7 @@ from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "1.5.7"
+VERSION = "1.5.8"
 PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -42,21 +42,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     shared_key = entry.data.get(CONF_SHARED_KEY)
 
     client = UniiClient(host, port, shared_key)
+    poll_count = [0]  # Mutable counter for closure
 
     async def async_update_data():
         """Fetch data from Unii."""
+        poll_count[0] += 1
+        poll_num = poll_count[0]
+        
         try:
+            # FORCE fresh connection every poll — eliminates stale connection issues
+            await client.disconnect()
+            
             if not await client.connect():
-                await client.disconnect()
                 raise UpdateFailed("Failed to connect to Unii panel")
             
-            # Poll Sections
+            # Poll Section Status
             section_resp = await client.get_status()
             
             if not section_resp:
-                _LOGGER.warning("Section poll returned None. Forcing reconnect.")
+                _LOGGER.warning(f"Poll #{poll_num}: Section poll returned None")
                 await client.disconnect()
-                raise UpdateFailed("No response from panel")
+                raise UpdateFailed("No section response from panel")
             
             data = {"sections": {}, "inputs": {}}
             
@@ -69,11 +75,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     data["sections"][section_idx] = s_state
                     section_idx += 1
                     offset += 2
-                _LOGGER.debug(f"Polled {section_idx-1} sections: {data['sections']}")
+                
+                if poll_num <= 5 or poll_num % 20 == 0:
+                    _LOGGER.warning(f"Poll #{poll_num}: Sections={data['sections']}")
             else:
-                _LOGGER.warning(f"Unexpected section response: 0x{section_resp.get('command', 0):04x}")
+                _LOGGER.warning(f"Poll #{poll_num}: Unexpected response 0x{section_resp.get('command', 0):04x}")
 
-            # Poll Inputs (best effort, don't fail if this doesn't work)
+            # Poll Input Status (best effort)
             try:
                 input_resp = await client.get_input_status()
                 if input_resp and input_resp.get("command") == 0x0105:
@@ -93,14 +101,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         input_idx += 1
                         offset += 2
             except Exception as e:
-                _LOGGER.debug(f"Input poll failed (non-fatal): {e}")
+                _LOGGER.debug(f"Poll #{poll_num}: Input poll failed (non-fatal): {e}")
+            
+            # Disconnect after polling — keep connection clean
+            await client.disconnect()
             
             return data
         except UpdateFailed:
             raise
         except Exception as err:
             await client.disconnect()
-            raise UpdateFailed(f"Error communicating with API: {err}")
+            raise UpdateFailed(f"Poll #{poll_num}: Error: {err}")
 
     coordinator = DataUpdateCoordinator(
         hass,
