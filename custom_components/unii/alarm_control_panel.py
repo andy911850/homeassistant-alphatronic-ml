@@ -17,6 +17,21 @@ from .const import DOMAIN, CONF_USER_CODE
 
 _LOGGER = logging.getLogger(__name__)
 
+# State mapping based on actual panel data
+# State 1 = Disarmed
+# State 2 = Armed
+# State 3 = Exit Timer (Arming)
+# State 4 = Entry Timer (Pending)
+# State 5 = Alarm (Triggered)
+SECTION_STATE_MAP = {
+    0: AlarmControlPanelState.DISARMED,      # Unknown/default
+    1: AlarmControlPanelState.DISARMED,      # Disarmed
+    2: AlarmControlPanelState.ARMED_AWAY,    # Armed
+    3: AlarmControlPanelState.ARMING,        # Exit Timer
+    4: AlarmControlPanelState.PENDING,       # Entry Timer
+    5: AlarmControlPanelState.TRIGGERED,     # Alarm
+}
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -25,14 +40,20 @@ async def async_setup_entry(
     """Set up Unii alarm control panel from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     
-    # Create alarms for Section 1 and 2, and a Master
-    sections = [
-        UniiAlarm(coordinator, 1, "Section 1", entry),
-        UniiAlarm(coordinator, 2, "Section 2", entry),
-        UniiMasterAlarm(coordinator, [1, 2], "Master", entry),
-    ]
+    # Detect sections from first poll data
+    sections_data = coordinator.data.get("sections", {}) if coordinator.data else {}
+    section_ids = sorted(sections_data.keys()) if sections_data else [1, 2]
     
-    async_add_entities(sections)
+    _LOGGER.warning(f"Creating alarm entities for sections: {section_ids}")
+    
+    entities = []
+    for sid in section_ids:
+        entities.append(UniiAlarm(coordinator, sid, f"Section {sid}", entry))
+    
+    # Master alarm covering all sections
+    entities.append(UniiMasterAlarm(coordinator, section_ids, "Master", entry))
+    
+    async_add_entities(entities)
 
 
 class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
@@ -54,10 +75,8 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         self._user_code = str(raw_code).strip() if raw_code else None
         
         if self._user_code:
-             _LOGGER.debug(f"UniiAlarm {section_id}: Stored user code found (Length {len(self._user_code)})")
              self._attr_code_format = None
         else:
-             _LOGGER.debug(f"UniiAlarm {section_id}: No stored user code found.")
              self._attr_code_format = CodeFormat.NUMBER
 
     @property
@@ -81,29 +100,13 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         sec_state = self.coordinator.data["sections"].get(self.section_id)
         if sec_state is None:
             return None
-            
-        # Mapping based on UNiiSectionArmedState
-        # 1=Disarmed, 3=Armed, 4=PartSet? (Need verification, assuming standard)
-        # However, earlier logging suggested 01=Disarmed, 02=Armed/Exit?
-        # Let's use the standard mapping from previous knowledge or assume:
-        # 1: Disarmed
-        # 3: Armed
-        # 9: Entry Delay
-        # 8: Exit Delay
-        # 7: Alarm
         
-        if sec_state == 1: 
+        mapped = SECTION_STATE_MAP.get(sec_state)
+        if mapped is None:
+            _LOGGER.warning(f"Section {self.section_id}: Unknown state value {sec_state}, defaulting to DISARMED")
             return AlarmControlPanelState.DISARMED
-        if sec_state == 3: 
-            return AlarmControlPanelState.ARMED_AWAY
-        if sec_state == 7: 
-            return AlarmControlPanelState.TRIGGERED
-        if sec_state == 8: 
-            return AlarmControlPanelState.ARMING
-        if sec_state == 9: 
-            return AlarmControlPanelState.PENDING
-            
-        return AlarmControlPanelState.DISARMED
+        
+        return mapped
 
     async def async_alarm_disarm(self, code=None) -> None:
         """Send disarm command."""
@@ -150,15 +153,9 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         raw_code = entry.data.get(CONF_USER_CODE)
         self._user_code = str(raw_code).strip() if raw_code else None
         
-        # DEBUGGING: Log actual data availability
         if self._user_code:
-             _LOGGER.info(f"UniiMasterAlarm: Success! User Code found (Length {len(self._user_code)}). Keypad will be HIDDEN.")
              self._attr_code_format = None
         else:
-             _LOGGER.warning(f"UniiMasterAlarm: User Code NOT found in config.")
-             _LOGGER.warning(f"DEBUG DATA KEYS: {list(entry.data.keys())}")
-             _LOGGER.warning(f"DEBUG OPTIONS KEYS: {list(entry.options.keys())}")
-             _LOGGER.warning(f"Is 'user_code' present? {'user_code' in entry.data}")
              self._attr_code_format = CodeFormat.NUMBER
 
     @property
@@ -185,13 +182,14 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         if not states:
             return None
 
-        if 7 in states: # ALARM
+        # Priority: Triggered > Pending > Arming > Armed > Disarmed
+        if 5 in states:
             return AlarmControlPanelState.TRIGGERED
-        if 9 in states: # ENTRY_TIMER
+        if 4 in states:
             return AlarmControlPanelState.PENDING
-        if 8 in states: # EXIT_TIMER
+        if 3 in states:
             return AlarmControlPanelState.ARMING
-        if any(s == 3 for s in states): # ARMED (If any is armed, master is armed)
+        if any(s == 2 for s in states):
             return AlarmControlPanelState.ARMED_AWAY
         
         return AlarmControlPanelState.DISARMED
