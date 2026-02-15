@@ -29,6 +29,38 @@ SECTION_STATE_MAP = {
     5: AlarmControlPanelState.TRIGGERED,     # Alarm
 }
 
+
+async def _inline_poll(coordinator):
+    """Poll section status on the CURRENT connection and update coordinator data.
+    
+    This is used after arm/disarm commands to get the fresh state
+    on the SAME connection (avoiding disconnect which loses arm state).
+    """
+    client = coordinator.client
+    section_resp = await client.get_status()
+    
+    if not section_resp or section_resp.get("command") != 0x0117:
+        _LOGGER.warning(f"Inline poll: unexpected response {section_resp}")
+        return
+    
+    raw_data = section_resp["data"]
+    data = dict(coordinator.data) if coordinator.data else {"sections": {}, "inputs": {}}
+    data["sections"] = {}
+    
+    offset = 1
+    section_idx = 1
+    while offset + 1 < len(raw_data):
+        s_state = raw_data[offset]
+        data["sections"][section_idx] = s_state
+        section_idx += 1
+        offset += 2
+    
+    _LOGGER.warning(f"Inline poll after command: Sections={data['sections']} RAW_HEX={raw_data.hex()}")
+    
+    # Update coordinator data directly — this notifies all entities
+    coordinator.async_set_updated_data(data)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -110,17 +142,16 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for disarm.")
             return
 
-        # Acquire shared lock so poll can't disconnect during our command
         async with self.coordinator.operation_lock:
             _LOGGER.warning(f"Disarming section {self.section_id}...")
             client = self.coordinator.client
-            # Ensure connected
             if not await client.connect():
                 _LOGGER.error(f"Cannot disarm section {self.section_id}: not connected")
                 return
             result = await client.disarm_section(self.section_id, use_code)
             _LOGGER.warning(f"Disarm section {self.section_id} result: {result}")
-        await self.coordinator.async_request_refresh()
+            # Poll on SAME connection to capture fresh state
+            await _inline_poll(self.coordinator)
 
     async def async_alarm_arm_away(self, code=None) -> None:
         """Send arm away command."""
@@ -130,17 +161,16 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for arm.")
             return
 
-        # Acquire shared lock so poll can't disconnect during our command
         async with self.coordinator.operation_lock:
             _LOGGER.warning(f"Arming section {self.section_id}...")
             client = self.coordinator.client
-            # Ensure connected
             if not await client.connect():
                 _LOGGER.error(f"Cannot arm section {self.section_id}: not connected")
                 return
             result = await client.arm_section(self.section_id, use_code)
             _LOGGER.warning(f"Arm section {self.section_id} result: {result}")
-        await self.coordinator.async_request_refresh()
+            # Poll on SAME connection to capture fresh state
+            await _inline_poll(self.coordinator)
 
 
 class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
@@ -210,7 +240,6 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for disarm.")
             return
 
-        # Acquire shared lock so poll can't disconnect during our commands
         async with self.coordinator.operation_lock:
             client = self.coordinator.client
             if not await client.connect():
@@ -220,7 +249,8 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.warning(f"Master: Disarming section {sid}...")
                 result = await client.disarm_section(sid, use_code)
                 _LOGGER.warning(f"Master: Disarm section {sid} result: {result}")
-        await self.coordinator.async_request_refresh()
+            # Poll on SAME connection to capture fresh state
+            await _inline_poll(self.coordinator)
 
     async def async_alarm_arm_away(self, code=None) -> None:
         """Send arm away command to all sections."""
@@ -229,7 +259,6 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for arm.")
             return
 
-        # Acquire shared lock so poll can't disconnect during our commands
         async with self.coordinator.operation_lock:
             client = self.coordinator.client
             if not await client.connect():
@@ -239,4 +268,5 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.warning(f"Master: Arming section {sid}...")
                 result = await client.arm_section(sid, use_code)
                 _LOGGER.warning(f"Master: Arm section {sid} result: {result}")
-        await self.coordinator.async_request_refresh()
+            # Poll on SAME connection to capture fresh state
+            await _inline_poll(self.coordinator)
