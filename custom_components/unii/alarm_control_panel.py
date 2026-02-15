@@ -17,16 +17,13 @@ from .const import DOMAIN, CONF_USER_CODE
 
 _LOGGER = logging.getLogger(__name__)
 
-# State mapping based on actual panel data
-# State 1 = Disarmed
-# State 2 = Armed
-# State 3 = Exit Timer (Arming)
-# State 4 = Entry Timer (Pending)
-# State 5 = Alarm (Triggered)
+# State mapping based on ACTUAL panel observation:
+# When armed via keypad -> poll shows state 1
+# When disarmed via keypad -> poll shows state 2
 SECTION_STATE_MAP = {
     0: AlarmControlPanelState.DISARMED,      # Unknown/default
-    1: AlarmControlPanelState.DISARMED,      # Disarmed
-    2: AlarmControlPanelState.ARMED_AWAY,    # Armed
+    1: AlarmControlPanelState.ARMED_AWAY,    # Armed (confirmed by user)
+    2: AlarmControlPanelState.DISARMED,      # Disarmed (confirmed by user)
     3: AlarmControlPanelState.ARMING,        # Exit Timer
     4: AlarmControlPanelState.PENDING,       # Entry Timer
     5: AlarmControlPanelState.TRIGGERED,     # Alarm

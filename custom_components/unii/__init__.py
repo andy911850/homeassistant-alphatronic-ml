@@ -103,8 +103,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception as e:
                 _LOGGER.debug(f"Poll #{poll_num}: Input poll failed (non-fatal): {e}")
             
-            # Disconnect after polling — keep connection clean
-            await client.disconnect()
+            # Keep connection open for arm/disarm commands between polls
             
             return data
         except UpdateFailed:
