@@ -37,42 +37,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     host = entry.data[CONF_HOST]
     port = entry.data[CONF_PORT]
-    shared_key = entry.data[CONF_SHARED_KEY]
+    shared_key = entry.data.get(CONF_SHARED_KEY)
 
     client = UniiClient(host, port, shared_key)
     
-    # Fetch Input Arrangement (Metadata) once
+    # Fetch Input Arrangement (Metadata) once at setup
     input_arrangement = {}
     try:
         if await client.connect():
             resp = await client.get_input_arrangement()
             if resp:
                 input_arrangement = resp.get("inputs", {})
+                _LOGGER.info(f"Loaded {len(input_arrangement)} input arrangements")
+            # IMPORTANT: disconnect and reconnect to clear any stale data in buffer
+            await client.disconnect()
     except Exception as e:
         _LOGGER.warning(f"Could not fetch input arrangement: {e}")
+        # Ensure we're disconnected cleanly
+        await client.disconnect()
 
     async def async_update_data():
         """Fetch data from Unii."""
         try:
             if not await client.connect():
-                # Force reconnect on next try
                 await client.disconnect()
                 raise UpdateFailed("Failed to connect to Unii panel")
             
-            # Retry fetching arrangement if missing
-            if not coordinator.input_arrangement:
-                 _LOGGER.debug("Input arrangement missing, attempting to fetch...")
-                 arr_res = await client.get_input_arrangement()
-                 if arr_res:
-                     coordinator.input_arrangement = arr_res.get("inputs", {})
-                     _LOGGER.debug(f"Fetched arrangement for {len(coordinator.input_arrangement)} inputs.")
-            
-            # Poll Sections and Inputs
+            # Poll Sections and Inputs — NO arrangement retry here
             section_resp = await client.get_status()
             input_resp = await client.get_input_status()
             
             if not section_resp and not input_resp:
-                # Both failed — connection is probably dead
                 _LOGGER.warning("Both status polls returned None. Forcing reconnect.")
                 await client.disconnect()
                 raise UpdateFailed("No response from panel")
@@ -117,7 +112,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except UpdateFailed:
             raise
         except Exception as err:
-            # Force reconnect on unexpected errors
             await client.disconnect()
             raise UpdateFailed(f"Error communicating with API: {err}")
 
