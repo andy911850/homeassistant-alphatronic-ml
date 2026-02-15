@@ -50,11 +50,15 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         self._attr_name = name_suffix
         self._attr_unique_id = f"{entry.entry_id}_section_{section_id}"
         
-        self._user_code = entry.data.get(CONF_USER_CODE)
+        raw_code = entry.data.get(CONF_USER_CODE)
+        self._user_code = str(raw_code).strip() if raw_code else None
+        
         if self._user_code:
              _LOGGER.debug(f"UniiAlarm {section_id}: Stored user code found (Length {len(self._user_code)})")
+             self._attr_code_format = None
         else:
              _LOGGER.debug(f"UniiAlarm {section_id}: No stored user code found.")
+             self._attr_code_format = CodeFormat.NUMBER
 
     @property
     def code_format(self) -> CodeFormat | None:
@@ -134,11 +138,15 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         self._attr_name = name_suffix
         self._attr_unique_id = f"{entry.entry_id}_master"
         
-        self._user_code = entry.data.get(CONF_USER_CODE)
+        raw_code = entry.data.get(CONF_USER_CODE)
+        self._user_code = str(raw_code).strip() if raw_code else None
+        
         if self._user_code:
              _LOGGER.debug(f"UniiMasterAlarm: Stored user code found (Length {len(self._user_code)})")
+             self._attr_code_format = None # Hint to HA logic
         else:
-             _LOGGER.debug("UniiMasterAlarm: No stored user code found.")
+             _LOGGER.debug("UniiMasterAlarm: No stored user code found (or empty).")
+             self._attr_code_format = CodeFormat.NUMBER
 
     @property
     def code_format(self) -> CodeFormat | None:
