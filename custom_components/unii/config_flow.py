@@ -63,7 +63,7 @@ class UniiOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize headers."""
-        self.config_entry = config_entry
+        super().__init__(config_entry)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -71,15 +71,15 @@ class UniiOptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the options."""
         if user_input is not None:
              # Update the entry's data (config) with the new options immediately
-             # because we aren't using separate 'options' dict for core logic yet.
-             # This effectively "edits" the config.
              new_data = self.config_entry.data.copy()
              new_data.update(user_input)
              
              self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
              return self.async_create_entry(title="", data={})
 
-        current_code = self.config_entry.data.get(CONF_USER_CODE, "")
+        # Ensure current_code is a string (config might have it as None or int)
+        raw_code = self.config_entry.data.get(CONF_USER_CODE)
+        current_code = str(raw_code) if raw_code is not None else ""
 
         return self.async_show_form(
             step_id="init",
