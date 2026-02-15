@@ -30,12 +30,12 @@ from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "1.5.19"
+VERSION = "1.6.0"
 PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Unii from a config entry."""
-    _LOGGER.warning(f"=== UNii Integration v{VERSION} starting ===")
+    _LOGGER.info(f"=== UNii Integration v{VERSION} starting ===")
     hass.data.setdefault(DOMAIN, {})
 
     host = entry.data[CONF_HOST]
@@ -102,10 +102,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         section_idx += 1
                         offset += 2
                     
-                    if poll_num <= 5 or poll_num % 20 == 0:
-                        _LOGGER.warning(f"Poll #{poll_num}: Sections={data['sections']} RAW_HEX={raw_data.hex()}")
+                    if poll_num <= 5 or poll_num % 600 == 0: # Log every 5 mins approx
+                        _LOGGER.debug(f"Poll #{poll_num}: Sections={data['sections']} RAW_HEX={raw_data.hex()}")
                 else:
-                    _LOGGER.warning(f"Poll #{poll_num}: Unexpected response 0x{section_resp.get('command', 0):04x}")
+                    _LOGGER.debug(f"Poll #{poll_num}: Unexpected response 0x{section_resp.get('command', 0):04x}")
 
                 # Poll Input Status (best effort)
                 # Only include inputs that have arrangement data (real zones)
@@ -114,8 +114,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     if input_resp and input_resp.get("command") == 0x0105:
                         raw_data = input_resp["data"]
                         
-                        # Log raw input data every 5 polls to debug state changes
-                        if poll_num <= 5 or poll_num % 10 == 0:
+                        # Log raw input data occasionally for debug
+                        if poll_num <= 5 or poll_num % 600 == 0:
                             _LOGGER.debug(f"Poll #{poll_num}: Inputs RAW_HEX={raw_data.hex()}")
 
                         offset = 2
@@ -131,8 +131,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 name = arr_info.get("name", f"Input {input_idx}")
                                 is_open = (status & 0x01) == 0x01
                                 
-                                # Log state for first few inputs to check bitmask
-                                if input_idx <= 3 and (poll_num <= 5 or poll_num % 10 == 0):
+                                # Log state for first few inputs to check bitmask (debug only)
+                                if input_idx <= 3 and (poll_num <= 5 or poll_num % 600 == 0):
                                      _LOGGER.debug(f"  Input {input_idx} ({name}): StatusByte={status_byte:02x} State={status} Open={is_open}")
 
                                 data["inputs"][input_idx] = {
@@ -173,7 +173,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     entry.async_on_unload(entry.add_update_listener(update_listener))
     
-    _LOGGER.warning(f"=== UNii Integration v{VERSION} loaded successfully ===")
+    _LOGGER.info(f"=== UNii Integration v{VERSION} loaded successfully ===")
 
     return True
 

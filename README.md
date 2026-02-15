@@ -1,32 +1,22 @@
 # Alphatronics ML / UNii (Custom Component)
 
 This is a specialized Home Assistant integration designed for **Alphatronics ML** and **UNii** alarm systems. 
-It communicates via the local network (Port 6502) using a reverse-engineered binary protocol, specifically adapted to support the unique data format of the **ML Series** panels.
+It communicates via the local network (Port 6502) using a reverse-engineered binary protocol, specifically optimized for the **ML Series** panels.
+
+**Current Version: v1.6.0**
 
 ## Key Features
 
-*   **ML Series Support**: Custom protocol handler for the **Alphatronics ML** legacy firmware (22-byte fixed-width zones, 2-byte status stride).
-*   **Smart Filtering**: automatically hides empty "VRIJE TEKST" zones, keeping your dashboard clean.
-*   **Robust Protocol**: Corrected implementation of the communication protocol (Input Arrangement), ensuring reliable connection even with complex panel configurations.
-*   **Multi-Section Support**: Control individual alarm sections (e.g., Section 1, Section 2) independently.
-*   **Master Control**: A composite Alarm Control Panel entity that monitors and controls the entire system.
-*   **Intelligent Zone Monitoring**:
-    *   **Automatic Naming**: Zones automatically use the names programmed on your panel (e.g., "Hallway PIR").
-    *   **States**: Clear, Open, Bypassed.
-    *   **Diagnostics**: Tamper detection, Anti-masking status, and Low Battery alerts.
-*   **Bypass Switches**: 
-    *   **Dedicated Platform**: Each security-relevant zone (Burglary/Glassbreak) receives a dedicated `switch` entity for easy bypassing.
-    *   **Bypass Capability**: Support for secure bypassing and unbypassing using your panel's user code.
-*   **Stored User Code**:
-    *   **One-Click Action**: Optionally store your alarm code in the configuration to enable one-click Arm/Disarm without a keypad.
-    *   **Security**: The code is stored locally in Home Assistant.
-*   **Enriched Alarm States**:
-    *   `Disarmed` / `Armed Away`
-    *   `Pending`: Active Exit or Entry delay timers.
-    *   `Triggered`: Active Alarm status.
-*   **High Performance Architecture**:
-    *   **DataUpdateCoordinator**: Centrally manages all communication in a background task to prevent UI lag.
-    *   **Async/Await**: Fast, non-blocking I/O keeps Home Assistant responsive.
+*   **⚡ Optimistic UI**: Instant feedback for Arm/Disarm operations, providing a snappy user experience.
+*   **🔒 Robust Security**:
+    *   **Secure Bypass**: Bypass switches now use the standard 16-digit/8-byte protocol for perfect compatibility.
+    *   **User Code Integration**: Safely retrieves your stored alarm code from Home Assistant configuration (supporting both initial setup and reconfiguration).
+*   **📊 Accurate Monitoring**:
+    *   **Smart State Detection**: Correctly identifies Open/Closed states using bit-level status analysis (Alarm, Tamper, Masking, Trouble).
+    *   **Auto-Filtering**: Automatically hides empty or unused "VRIJE TEKST" zones to keep your dashboard clean.
+*   **🔌 Stability First**:
+    *   **Connection Management**: Uses a "Disconnect/Reconnect" strategy per poll to ensure fresh data and prevent stale connections.
+    *   **Conflict Prevention**: Shared operation locks prevent command collisions during polling.
 
 ## Panel Configuration
 
@@ -54,45 +44,21 @@ To allow this integration to communicate with your alarm panel, you must configu
 4.  **Setup**:
     *   Go to **Settings > Devices & Services**.
     *   Click **Add Integration** and search for **UNii**.
-    *   Enter your **Panel IP**, **Port** (6502), and **Shared Key** (if "Basic Encryption" is enabled in AlphaTool).
-    *   **(Optional) User Code**: Enter your 4-digit alarm code to enable one-click Arm/Disarm and hide the keypad in the UI.
-
-### Existing Users (Adding User Code)
-If you already have the integration installed and want to add the **User Code**, you must:
-1.  Go to **Settings > Devices & Services**.
-2.  **Delete** the "Alphatronics ML" integration.
-3.  **Add Integration** > "UNii" again.
-4.  Enter your details and the new **User Code**.
-*(Note: Your entity IDs will likely remain the same, but you may need to rename them if they change.)*
+    *   Enter your **Panel IP**, **Port** (6502), and **Shared Key**.
 
 ## Troubleshooting
 
-### Connection Failed (Errno 110 / WinError 121)
-If you see a "Connection failed" error or the integration fails to add:
-1.  **Close AlphaTool**: The panel only supports **one** connection. If AlphaTool is open, Home Assistant cannot connect.
-2.  **Hard Reboot Panel**: The panel's network interface may freeze.
-    *   Disconnect **AC Power** and **Battery**.
-    *   Wait **10-15 seconds**.
-    *   Reconnect power.
+### Connection Failed
+If you see a "Connection failed" error:
+1.  **Close AlphaTool**: The panel only supports **one** connection.
+2.  **Hard Reboot Panel**: Disconnect AC and Battery for 15 seconds if the interface is frozen.
 
-### "Arming requires a code but none was given"
-### "Arming requires a code but none was given"
-This means the integration cannot find a stored User Code.
-
-1.  Click **Configure** on the integration.
-2.  Enter your **User Code**.
-3.  Click **Submit**.
-4.  **Restart Home Assistant**.
-
-## Requirements
-
-*   **pycryptodome**: Automatically installed as a dependency.
+### Bypass Switch Issues
+If you cannot toggle bypass switches:
+1.  Ensure you have entered a **User Code** in the integration configuration.
+2.  Update to **v1.6.0+** which allows fallback to default code '1234' and supports standard protocol formats.
 
 ## Acknowledgments & License
 
-This project is an evolution of the original library and integration developed by [unii-security](https://github.com/unii-security). We have adapted the core logic into a standalone, asynchronous, and multi-entity integration for improved stability and feature coverage.
-
-This software is licensed under the **Apache License 2.0**. See the `LICENSE` file for details.
-
----
-**GitHub Repository**: [homeassistant-alphatronic-ml](https://github.com/andy911850/homeassistant-alphatronic-ml)
+This project is an evolution of the original library and integration developed by [unii-security](https://github.com/unii-security).
+Licensed under the **Apache License 2.0**.
