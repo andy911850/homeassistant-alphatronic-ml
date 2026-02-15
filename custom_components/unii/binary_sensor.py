@@ -21,6 +21,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.const import EntityCategory
 
 from .const import DOMAIN
 
@@ -91,8 +92,6 @@ class UniiTamperBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_name = f"{name} Tamper"
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_input_{input_id}_tamper"
         self._attr_device_class = BinarySensorDeviceClass.TAMPER
-from homeassistant.const import EntityCategory
-
     @property
     def entity_category(self):
         """Return the category of the entity."""
