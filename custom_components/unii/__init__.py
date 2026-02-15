@@ -77,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     offset += 2
                 
                 if poll_num <= 5 or poll_num % 20 == 0:
-                    _LOGGER.warning(f"Poll #{poll_num}: Sections={data['sections']}")
+                    _LOGGER.warning(f"Poll #{poll_num}: Sections={data['sections']} RAW_HEX={raw_data.hex()}")
             else:
                 _LOGGER.warning(f"Poll #{poll_num}: Unexpected response 0x{section_resp.get('command', 0):04x}")
 

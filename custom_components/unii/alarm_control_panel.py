@@ -107,6 +107,7 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
 
     async def async_alarm_disarm(self, code=None) -> None:
         """Send disarm command."""
+        _LOGGER.warning(f">>> DISARM CALLED on entity {self._attr_unique_id} (section {self.section_id})")
         use_code = code if code else self._user_code
         if not use_code:
             _LOGGER.error("No code provided for disarm.")
@@ -120,6 +121,7 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
 
     async def async_alarm_arm_away(self, code=None) -> None:
         """Send arm away command."""
+        _LOGGER.warning(f">>> ARM CALLED on entity {self._attr_unique_id} (section {self.section_id})")
         use_code = code if code else self._user_code
         if not use_code:
             _LOGGER.error("No code provided for arm.")
