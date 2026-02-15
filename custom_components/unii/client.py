@@ -307,9 +307,9 @@ class UniiClient:
     async def bypass_input(self, input_id, user_code):
         async with self._transaction_lock:
             # Request to Bypass an Input (0x0118)
-            # Mode (0x00 = User Code) | Code (8b BCD) | InputID (2b)
+            # Mode (0x00 = User Code) | Code (16 dig/8 byte BCD) | InputID (2b)
             payload = bytearray([0x00])
-            payload.extend(self._bcd_encode_v2(user_code))
+            payload.extend(self._bcd_encode(user_code))
             payload.extend(struct.pack(">H", input_id))
             if await self._send_command(0x0118, payload):
                 return await self._recv_response(expected_cmd=0x0119)
@@ -319,7 +319,7 @@ class UniiClient:
         async with self._transaction_lock:
             # Request to Unbypass an Input (0x011A)
             payload = bytearray([0x00])
-            payload.extend(self._bcd_encode_v2(user_code))
+            payload.extend(self._bcd_encode(user_code))
             payload.extend(struct.pack(">H", input_id))
             if await self._send_command(0x011A, payload):
                 return await self._recv_response(expected_cmd=0x011B)
