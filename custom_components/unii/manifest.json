@@ -10,6 +10,6 @@
     "pycryptodome>=3.19.0"
   ],
   "iot_class": "local_polling",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "issue_tracker": "https://github.com/andy911850/homeassistant-alphatronic-ml/issues"
 }
