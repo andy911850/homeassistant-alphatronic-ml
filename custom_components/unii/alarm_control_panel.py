@@ -112,8 +112,10 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for disarm.")
             return
 
+        _LOGGER.warning(f"Disarming section {self.section_id}...")
         client = self.coordinator.client
-        await client.disarm_section(self.section_id, use_code)
+        result = await client.disarm_section(self.section_id, use_code)
+        _LOGGER.warning(f"Disarm section {self.section_id} result: {result}")
         await self.coordinator.async_request_refresh()
 
     async def async_alarm_arm_away(self, code=None) -> None:
@@ -123,8 +125,10 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for arm.")
             return
 
+        _LOGGER.warning(f"Arming section {self.section_id}...")
         client = self.coordinator.client
-        await client.arm_section(self.section_id, use_code)
+        result = await client.arm_section(self.section_id, use_code)
+        _LOGGER.warning(f"Arm section {self.section_id} result: {result}")
         await self.coordinator.async_request_refresh()
 
 
@@ -201,7 +205,9 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
 
         client = self.coordinator.client
         for sid in self.section_ids:
-            await client.disarm_section(sid, use_code)
+            _LOGGER.warning(f"Master: Disarming section {sid}...")
+            result = await client.disarm_section(sid, use_code)
+            _LOGGER.warning(f"Master: Disarm section {sid} result: {result}")
         await self.coordinator.async_request_refresh()
 
     async def async_alarm_arm_away(self, code=None) -> None:
@@ -213,5 +219,7 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
 
         client = self.coordinator.client
         for sid in self.section_ids:
-            await client.arm_section(sid, use_code)
+            _LOGGER.warning(f"Master: Arming section {sid}...")
+            result = await client.arm_section(sid, use_code)
+            _LOGGER.warning(f"Master: Arm section {sid} result: {result}")
         await self.coordinator.async_request_refresh()

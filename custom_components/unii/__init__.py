@@ -29,10 +29,12 @@ from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
 
+VERSION = "1.5.7"
 PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Unii from a config entry."""
+    _LOGGER.warning(f"=== UNii Integration v{VERSION} starting ===")
     hass.data.setdefault(DOMAIN, {})
 
     host = entry.data[CONF_HOST]
@@ -40,21 +42,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     shared_key = entry.data.get(CONF_SHARED_KEY)
 
     client = UniiClient(host, port, shared_key)
-    
-    # Fetch Input Arrangement (Metadata) once at setup
-    input_arrangement = {}
-    try:
-        if await client.connect():
-            resp = await client.get_input_arrangement()
-            if resp:
-                input_arrangement = resp.get("inputs", {})
-                _LOGGER.info(f"Loaded {len(input_arrangement)} input arrangements")
-            # IMPORTANT: disconnect and reconnect to clear any stale data in buffer
-            await client.disconnect()
-    except Exception as e:
-        _LOGGER.warning(f"Could not fetch input arrangement: {e}")
-        # Ensure we're disconnected cleanly
-        await client.disconnect()
 
     async def async_update_data():
         """Fetch data from Unii."""
@@ -63,18 +50,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await client.disconnect()
                 raise UpdateFailed("Failed to connect to Unii panel")
             
-            # Poll Sections and Inputs — NO arrangement retry here
+            # Poll Sections
             section_resp = await client.get_status()
-            input_resp = await client.get_input_status()
             
-            if not section_resp and not input_resp:
-                _LOGGER.warning("Both status polls returned None. Forcing reconnect.")
+            if not section_resp:
+                _LOGGER.warning("Section poll returned None. Forcing reconnect.")
                 await client.disconnect()
                 raise UpdateFailed("No response from panel")
             
             data = {"sections": {}, "inputs": {}}
             
-            if section_resp and section_resp.get("command") == 0x0117:
+            if section_resp.get("command") == 0x0117:
                 raw_data = section_resp["data"]
                 offset = 1
                 section_idx = 1
@@ -83,30 +69,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     data["sections"][section_idx] = s_state
                     section_idx += 1
                     offset += 2
-            
-            if input_resp and input_resp.get("command") == 0x0105:
-                raw_data = input_resp["data"]
-                offset = 2
-                input_idx = 1
-                
-                while offset + 1 < len(raw_data):
-                    status_byte = raw_data[offset]
-                    info = coordinator.input_arrangement.get(input_idx)
-                    
-                    if info:
-                         stype = info.get("sensor_type", 0)
-                         status = status_byte & 0x0F
-                         
-                         data["inputs"][input_idx] = {
+                _LOGGER.debug(f"Polled {section_idx-1} sections: {data['sections']}")
+            else:
+                _LOGGER.warning(f"Unexpected section response: 0x{section_resp.get('command', 0):04x}")
+
+            # Poll Inputs (best effort, don't fail if this doesn't work)
+            try:
+                input_resp = await client.get_input_status()
+                if input_resp and input_resp.get("command") == 0x0105:
+                    raw_data = input_resp["data"]
+                    offset = 2
+                    input_idx = 1
+                    while offset + 1 < len(raw_data):
+                        status_byte = raw_data[offset]
+                        status = status_byte & 0x0F
+                        data["inputs"][input_idx] = {
                             "status": status,
                             "bypassed": bool(status_byte & 0x10),
                             "low_battery": bool(status_byte & 0x40),
-                            "name": info.get("name", f"Input {input_idx}"),
-                            "sensor_type": stype,
+                            "name": f"Input {input_idx}",
+                            "sensor_type": 0,
                         }
-                    
-                    input_idx += 1
-                    offset += 2
+                        input_idx += 1
+                        offset += 2
+            except Exception as e:
+                _LOGGER.debug(f"Input poll failed (non-fatal): {e}")
             
             return data
         except UpdateFailed:
@@ -123,7 +110,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_interval=timedelta(seconds=5),
     )
     coordinator.client = client 
-    coordinator.input_arrangement = input_arrangement
+    coordinator.input_arrangement = {}
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -132,6 +119,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
     entry.async_on_unload(entry.add_update_listener(update_listener))
+    
+    _LOGGER.warning(f"=== UNii Integration v{VERSION} loaded successfully ===")
 
     return True
 
