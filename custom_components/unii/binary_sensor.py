@@ -62,9 +62,8 @@ class UniiInputBinarySensor(CoordinatorEntity, BinarySensorEntity):
         status_record = self.coordinator.data["inputs"].get(self._input_id)
         if not status_record:
             return False
-        # Bit 0 is Open/Alarm. 
-        # Note: 0x00 is OK, 0x01 is ALARM.
-        return (status_record["status"] & 0x01) == 0x01
+        # Check ANY non-zero status in lower nibble (Alarm, Tamper, Mask, Trouble)
+        return (status_record["status"] & 0x0F) > 0
 
     @property
     def extra_state_attributes(self):
