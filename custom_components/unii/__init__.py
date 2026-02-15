@@ -30,7 +30,7 @@ from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

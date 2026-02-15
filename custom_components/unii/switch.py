@@ -83,11 +83,25 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
                     _LOGGER.error("Could not connect to panel for bypass command")
                     return
                 
-                await client.bypass_input(self._input_id, code)
+                resp = await client.bypass_input(self._input_id, code)
+                if resp and len(resp) >= 3:
+                    result = resp[2]
+                    if result == 1:
+                        _LOGGER.info(f"Bypass Input {self._input_id} Success")
+                    elif result == 2:
+                        _LOGGER.error(f"Bypass Input {self._input_id} Failed: Authentication Failed (Check User Code)")
+                        return
+                    elif result == 3:
+                        _LOGGER.error(f"Bypass Input {self._input_id} Failed: Not Allowed")
+                        return
+                    else:
+                        _LOGGER.error(f"Bypass Input {self._input_id} Failed: Result Code {result}")
+                        return
+                else:
+                    _LOGGER.error(f"Bypass Input {self._input_id} Failed: No response or invalid data")
+                    return
             except Exception as e:
                 _LOGGER.error(f"Failed to bypass input {self._input_id}: {e}")
-                # Ensure we don't leave a broken connection? 
-                # The poll loop handles force disconnect anyway.
 
         await self.coordinator.async_request_refresh()
 
@@ -110,7 +124,23 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
                     _LOGGER.error("Could not connect to panel for unbypass command")
                     return
                 
-                await client.unbypass_input(self._input_id, code)
+                resp = await client.unbypass_input(self._input_id, code)
+                if resp and len(resp) >= 3:
+                    result = resp[2]
+                    if result == 1:
+                        _LOGGER.info(f"Unbypass Input {self._input_id} Success")
+                    elif result == 2:
+                        _LOGGER.error(f"Unbypass Input {self._input_id} Failed: Authentication Failed (Check User Code)")
+                        return
+                    elif result == 3:
+                        _LOGGER.error(f"Unbypass Input {self._input_id} Failed: Not Allowed")
+                        return
+                    else:
+                        _LOGGER.error(f"Unbypass Input {self._input_id} Failed: Result Code {result}")
+                        return
+                else:
+                    _LOGGER.error(f"Unbypass Input {self._input_id} Failed: No response or invalid data")
+                    return
             except Exception as e:
                 _LOGGER.error(f"Failed to unbypass input {self._input_id}: {e}")
 
