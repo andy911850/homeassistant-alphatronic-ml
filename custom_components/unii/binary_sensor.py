@@ -91,7 +91,12 @@ class UniiTamperBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_name = f"{name} Tamper"
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_input_{input_id}_tamper"
         self._attr_device_class = BinarySensorDeviceClass.TAMPER
-        self._attr_entity_category = "diagnostic"
+from homeassistant.const import EntityCategory
+
+    @property
+    def entity_category(self):
+        """Return the category of the entity."""
+        return EntityCategory.DIAGNOSTIC
 
     @property
     def is_on(self):

@@ -45,7 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     input_arrangement = {}
     try:
         if await client.connect():
-            resp = await client.get_input_arrangement(0)
+            resp = await client.get_input_arrangement()
             if resp:
                 input_arrangement = resp.get("inputs", {})
     except Exception as e:
