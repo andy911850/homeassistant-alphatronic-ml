@@ -116,12 +116,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         
                         # Log raw input data every 5 polls to debug state changes
                         if poll_num <= 5 or poll_num % 10 == 0:
-                            _LOGGER.warning(f"Poll #{poll_num}: Inputs RAW_HEX={raw_data.hex()}")
+                            _LOGGER.debug(f"Poll #{poll_num}: Inputs RAW_HEX={raw_data.hex()}")
 
                         offset = 2
                         input_idx = 1
                         while offset + 1 < len(raw_data):
-                            status_byte = raw_data[offset]
+                            # Logs show status is in the second byte (00 01 = Open, 00 00 = Closed)
+                            status_byte = raw_data[offset+1]
                             status = status_byte & 0x0F
                             
                             # Only include inputs with arrangement data (skip VRIJE TEKST etc.)
@@ -132,7 +133,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 
                                 # Log state for first few inputs to check bitmask
                                 if input_idx <= 3 and (poll_num <= 5 or poll_num % 10 == 0):
-                                     _LOGGER.warning(f"  Input {input_idx} ({name}): StatusByte={status_byte:02x} State={status} Open={is_open}")
+                                     _LOGGER.debug(f"  Input {input_idx} ({name}): StatusByte={status_byte:02x} State={status} Open={is_open}")
 
                                 data["inputs"][input_idx] = {
                                     "status": status,
