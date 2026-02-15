@@ -17,6 +17,9 @@ It communicates via the local network (Port 6502) using a reverse-engineered bin
 *   **Bypass Switches**: 
     *   **Dedicated Platform**: Each security-relevant zone (Burglary/Glassbreak) receives a dedicated `switch` entity for easy bypassing.
     *   **Bypass Capability**: Support for secure bypassing and unbypassing using your panel's user code.
+*   **Stored User Code**:
+    *   **One-Click Action**: Optionally store your alarm code in the configuration to enable one-click Arm/Disarm without a keypad.
+    *   **Security**: The code is stored locally in Home Assistant.
 *   **Enriched Alarm States**:
     *   `Disarmed` / `Armed Away`
     *   `Pending`: Active Exit or Entry delay timers.
@@ -52,6 +55,7 @@ To allow this integration to communicate with your alarm panel, you must configu
     *   Go to **Settings > Devices & Services**.
     *   Click **Add Integration** and search for **UNii**.
     *   Enter your **Panel IP**, **Port** (6502), and **Shared Key** (if "Basic Encryption" is enabled in AlphaTool).
+    *   **(Optional) User Code**: Enter your 4-digit alarm code to enable one-click Arm/Disarm and hide the keypad in the UI.
 
 ## Troubleshooting
 
