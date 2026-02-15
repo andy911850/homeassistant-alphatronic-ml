@@ -1,0 +1,28 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Connect to Alphatronics UNii Panel",
+                "data": {
+                    "host": "Host",
+                    "port": "Port",
+                    "shared_key": "Shared Key (Encryption Key)",
+                    "user_code": "User Code (Optional, for one-click arm/disarm)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Failed to connect to the alarm panel. Make sure AlphaTool is closed and the panel is reachable."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Configure Alphatronics UNii",
+                "data": {
+                    "user_code": "User Code (for one-click arm/disarm)"
+                }
+            }
+        }
+    }
+}
