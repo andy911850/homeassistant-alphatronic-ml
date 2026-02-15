@@ -276,11 +276,17 @@ class UniiClient:
                         name_raw = data[offset+3:offset+19]
                         name = name_raw.decode("utf-8", errors="replace").strip()
                         
+                        # Log every zone for debugging
+                        # _LOGGER.warning(f"Zone {input_num} raw='{name_raw.hex()}' decoded='{name}'")
+                        
                         # Skip empty zones
                         if "VRIJE TEKST" in name or name == "" or all(c == '\x00' for c in name):
+                            # _LOGGER.warning(f"Skipping Zone {input_num} (Name='{name}')")
                             offset += 22
                             items_in_block += 1
                             continue
+                        
+                        _LOGGER.warning(f"Keeping Zone {input_num}: '{name}'")
 
                         inputs[input_num] = {
                             "name": name,
