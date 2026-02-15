@@ -57,6 +57,14 @@ To allow this integration to communicate with your alarm panel, you must configu
     *   Enter your **Panel IP**, **Port** (6502), and **Shared Key** (if "Basic Encryption" is enabled in AlphaTool).
     *   **(Optional) User Code**: Enter your 4-digit alarm code to enable one-click Arm/Disarm and hide the keypad in the UI.
 
+### Existing Users (Adding User Code)
+If you already have the integration installed and want to add the **User Code**, you must:
+1.  Go to **Settings > Devices & Services**.
+2.  **Delete** the "Alphatronics ML" integration.
+3.  **Add Integration** > "UNii" again.
+4.  Enter your details and the new **User Code**.
+*(Note: Your entity IDs will likely remain the same, but you may need to rename them if they change.)*
+
 ## Troubleshooting
 
 ### Connection Failed (Errno 110 / WinError 121)
