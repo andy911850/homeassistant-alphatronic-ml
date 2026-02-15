@@ -77,7 +77,7 @@ If you see a "Connection failed" error or the integration fails to add:
 
 ### "Arming requires a code but none was given"
 If you see this error after adding your User Code:
-*   **Update to v1.3.2**: A fix was released to correct how the user code is read by the buttons.
+*   **Update to v1.3.3**: A robust fix was released to handle code format issues.
 *   **Restart Home Assistant**: Ensure the new code is loaded.
 
 ## Requirements
