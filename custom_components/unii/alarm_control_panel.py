@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import logging
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
@@ -19,52 +20,42 @@ from .const import DOMAIN, CONF_USER_CODE
 _LOGGER = logging.getLogger(__name__)
 
 # State mapping based on ACTUAL panel observation:
-# When armed via keypad -> poll shows state 1
-# When disarmed via keypad -> poll shows state 2
+# Panel status poll value -> HA state
 SECTION_STATE_MAP = {
-    0: AlarmControlPanelState.DISARMED,      # Unknown/default
-    1: AlarmControlPanelState.ARMED_AWAY,    # Armed (confirmed by user)
-    2: AlarmControlPanelState.DISARMED,      # Disarmed (confirmed by user)
+    0: AlarmControlPanelState.DISARMED,
+    1: AlarmControlPanelState.ARMED_AWAY,    # Armed
+    2: AlarmControlPanelState.DISARMED,      # Disarmed
     3: AlarmControlPanelState.ARMING,        # Exit Timer
     4: AlarmControlPanelState.PENDING,       # Entry Timer
     5: AlarmControlPanelState.TRIGGERED,     # Alarm
 }
 
+# Optimistic state overrides — trust arm/disarm command results
+# Format: {section_id: (state_value, timestamp)}
+# Overrides are valid for 30 seconds
+_state_overrides = {}
+_OVERRIDE_TTL = 30  # seconds
 
-async def _inline_poll(coordinator):
-    """Poll section status on the CURRENT connection and update coordinator data.
-    
-    Called after arm/disarm commands. Waits 1 second for panel to settle,
-    then polls twice (first response might be a stale async notification).
-    """
-    client = coordinator.client
-    
-    # Wait for panel to process the command and update internal state
-    await asyncio.sleep(1.0)
-    
-    # Poll - might get stale async notification first
-    section_resp = await client.get_status()
-    
-    if not section_resp or section_resp.get("command") != 0x0117:
-        _LOGGER.warning(f"Inline poll: unexpected response {section_resp}")
-        return
-    
-    raw_data = section_resp["data"]
-    data = dict(coordinator.data) if coordinator.data else {"sections": {}, "inputs": {}}
-    data["sections"] = {}
-    
-    offset = 1
-    section_idx = 1
-    while offset + 1 < len(raw_data):
-        s_state = raw_data[offset]
-        data["sections"][section_idx] = s_state
-        section_idx += 1
-        offset += 2
-    
-    _LOGGER.warning(f"Inline poll after command: Sections={data['sections']} RAW_HEX={raw_data.hex()}")
-    
-    # Update coordinator data directly — this notifies all entities
-    coordinator.async_set_updated_data(data)
+
+def _set_override(section_id: int, state_value: int):
+    """Set an optimistic state override for a section."""
+    _state_overrides[section_id] = (state_value, time.time())
+    _LOGGER.warning(f"Set optimistic override: section {section_id} = {state_value} ({SECTION_STATE_MAP.get(state_value)})")
+
+
+def _get_effective_state(section_id: int, polled_value: int) -> int:
+    """Get effective state, preferring fresh overrides over poll data."""
+    if section_id in _state_overrides:
+        override_value, override_time = _state_overrides[section_id]
+        age = time.time() - override_time
+        if age < _OVERRIDE_TTL:
+            if override_value != polled_value:
+                _LOGGER.debug(f"Section {section_id}: using override {override_value} (age={age:.0f}s) over polled {polled_value}")
+            return override_value
+        else:
+            # Override expired, remove it
+            del _state_overrides[section_id]
+    return polled_value
 
 
 async def async_setup_entry(
@@ -75,10 +66,8 @@ async def async_setup_entry(
     """Set up Unii alarm control panel from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     
-    # Log the actual state mapping to verify correct code is loaded
     _LOGGER.warning(f"STATE MAP: 1={SECTION_STATE_MAP[1]}, 2={SECTION_STATE_MAP[2]}")
     
-    # Section 1, Section 2, and Master
     sections = [
         UniiAlarm(coordinator, 1, "Section 1", entry),
         UniiAlarm(coordinator, 2, "Section 2", entry),
@@ -97,7 +86,6 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
     )
 
     def __init__(self, coordinator, section_id: int, name_suffix: str, entry: ConfigEntry) -> None:
-        """Initialize the alarm."""
         super().__init__(coordinator)
         self.section_id = section_id
         self._attr_name = name_suffix
@@ -113,35 +101,34 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
 
     @property
     def code_format(self) -> CodeFormat | None:
-        """Return one of the CODE_FORMAT_* constants."""
         if self._user_code:
             return None
         return CodeFormat.NUMBER
 
     @property
     def code_arm_required(self) -> bool:
-        """Whether the code is required for arm actions."""
         return not bool(self._user_code)
 
     @property
     def state(self) -> AlarmControlPanelState | None:
-        """Return the state of the device."""
         if not self.coordinator.data or "sections" not in self.coordinator.data:
             return None
             
-        sec_state = self.coordinator.data["sections"].get(self.section_id)
-        if sec_state is None:
+        polled_state = self.coordinator.data["sections"].get(self.section_id)
+        if polled_state is None:
             return None
         
-        mapped = SECTION_STATE_MAP.get(sec_state)
+        # Use optimistic override if available and fresh
+        effective_state = _get_effective_state(self.section_id, polled_state)
+        
+        mapped = SECTION_STATE_MAP.get(effective_state)
         if mapped is None:
-            _LOGGER.warning(f"Section {self.section_id}: Unknown state value {sec_state}, defaulting to DISARMED")
+            _LOGGER.warning(f"Section {self.section_id}: Unknown state {effective_state}")
             return AlarmControlPanelState.DISARMED
         
         return mapped
 
     async def async_alarm_disarm(self, code=None) -> None:
-        """Send disarm command."""
         _LOGGER.warning(f">>> DISARM CALLED on entity {self._attr_unique_id} (section {self.section_id})")
         use_code = code if code else self._user_code
         if not use_code:
@@ -149,18 +136,21 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             return
 
         async with self.coordinator.operation_lock:
-            _LOGGER.warning(f"Disarming section {self.section_id}...")
             client = self.coordinator.client
             if not await client.connect():
                 _LOGGER.error(f"Cannot disarm section {self.section_id}: not connected")
                 return
             result = await client.disarm_section(self.section_id, use_code)
             _LOGGER.warning(f"Disarm section {self.section_id} result: {result}")
-            # Poll on SAME connection to capture fresh state
-            await _inline_poll(self.coordinator)
+            
+            # Check for success (result byte == 0x01)
+            if result and result.get("data") and len(result["data"]) >= 2 and result["data"][1] == 0x01:
+                _set_override(self.section_id, 2)  # 2 = disarmed
+        
+        # Force UI update
+        self.async_write_ha_state()
 
     async def async_alarm_arm_away(self, code=None) -> None:
-        """Send arm away command."""
         _LOGGER.warning(f">>> ARM CALLED on entity {self._attr_unique_id} (section {self.section_id})")
         use_code = code if code else self._user_code
         if not use_code:
@@ -168,15 +158,19 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             return
 
         async with self.coordinator.operation_lock:
-            _LOGGER.warning(f"Arming section {self.section_id}...")
             client = self.coordinator.client
             if not await client.connect():
                 _LOGGER.error(f"Cannot arm section {self.section_id}: not connected")
                 return
             result = await client.arm_section(self.section_id, use_code)
             _LOGGER.warning(f"Arm section {self.section_id} result: {result}")
-            # Poll on SAME connection to capture fresh state
-            await _inline_poll(self.coordinator)
+            
+            # Check for success (result byte == 0x01)
+            if result and result.get("data") and len(result["data"]) >= 2 and result["data"][1] == 0x01:
+                _set_override(self.section_id, 1)  # 1 = armed
+        
+        # Force UI update
+        self.async_write_ha_state()
 
 
 class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
@@ -188,7 +182,6 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
     )
 
     def __init__(self, coordinator, section_ids: list[int], name_suffix: str, entry: ConfigEntry) -> None:
-        """Initialize the master alarm."""
         super().__init__(coordinator)
         self.section_ids = section_ids
         self._attr_name = name_suffix
@@ -204,30 +197,29 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
 
     @property
     def code_format(self) -> CodeFormat | None:
-        """Return one of the CODE_FORMAT_* constants."""
         if self._user_code:
             return None
         return CodeFormat.NUMBER
 
     @property
     def code_arm_required(self) -> bool:
-        """Whether the code is required for arm actions."""
         return not bool(self._user_code)
 
     @property
     def state(self) -> AlarmControlPanelState | None:
-        """Return the composite state of the system."""
         if not self.coordinator.data or "sections" not in self.coordinator.data:
             return None
             
-        states = [self.coordinator.data["sections"].get(sid) for sid in self.section_ids]
-        states = [s for s in states if s is not None]
+        states = []
+        for sid in self.section_ids:
+            polled = self.coordinator.data["sections"].get(sid)
+            if polled is not None:
+                effective = _get_effective_state(sid, polled)
+                states.append(effective)
         
         if not states:
             return None
 
-        # Priority: Triggered > Pending > Arming > Armed > Disarmed
-        # Using actual panel values: 1=Armed, 2=Disarmed
         if 5 in states:
             return AlarmControlPanelState.TRIGGERED
         if 4 in states:
@@ -240,7 +232,6 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         return AlarmControlPanelState.DISARMED
 
     async def async_alarm_disarm(self, code=None) -> None:
-        """Send disarm command to all sections."""
         use_code = code if code else self._user_code
         if not use_code:
             _LOGGER.error("No code provided for disarm.")
@@ -255,11 +246,12 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.warning(f"Master: Disarming section {sid}...")
                 result = await client.disarm_section(sid, use_code)
                 _LOGGER.warning(f"Master: Disarm section {sid} result: {result}")
-            # Poll on SAME connection to capture fresh state
-            await _inline_poll(self.coordinator)
+                if result and result.get("data") and len(result["data"]) >= 2 and result["data"][1] == 0x01:
+                    _set_override(sid, 2)  # 2 = disarmed
+        
+        self.async_write_ha_state()
 
     async def async_alarm_arm_away(self, code=None) -> None:
-        """Send arm away command to all sections."""
         use_code = code if code else self._user_code
         if not use_code:
             _LOGGER.error("No code provided for arm.")
@@ -274,5 +266,7 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.warning(f"Master: Arming section {sid}...")
                 result = await client.arm_section(sid, use_code)
                 _LOGGER.warning(f"Master: Arm section {sid} result: {result}")
-            # Poll on SAME connection to capture fresh state
-            await _inline_poll(self.coordinator)
+                if result and result.get("data") and len(result["data"]) >= 2 and result["data"][1] == 0x01:
+                    _set_override(sid, 1)  # 1 = armed
+        
+        self.async_write_ha_state()
