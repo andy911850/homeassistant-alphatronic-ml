@@ -10,7 +10,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DOMAIN, CONF_SHARED_KEY, DEFAULT_PORT
+from .const import DOMAIN, CONF_SHARED_KEY, CONF_USER_CODE, DEFAULT_PORT
 from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,8 +18,9 @@ _LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
-        vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
-        vol.Required(CONF_SHARED_KEY): str,
+        vol.Required(CONF_PORT, default=6502): int,
+        vol.Optional(CONF_SHARED_KEY): str,
+        vol.Optional(CONF_USER_CODE): str,
     }
 )
 

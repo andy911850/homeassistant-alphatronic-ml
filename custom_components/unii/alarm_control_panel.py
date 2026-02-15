@@ -97,64 +97,36 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         await client.disarm_section(self.section_id, code)
         await self.coordinator.async_request_refresh()
 
-    async def async_alarm_arm_away(self, code: str | None = None) -> None:
-        """Send arm away command for this section."""
-        if not code:
+
+    async def async_alarm_disarm(self, code=None) -> None:
+        """Send disarm command."""
+        # Fallback to stored code
+        use_code = code if code else self._user_code
+        
+        if not use_code:
+            _LOGGER.error("No code provided for disarm.")
             return
-        client = self.coordinator.client
-        await client.arm_section(self.section_id, code)
-        await self.coordinator.async_request_refresh()
 
+        if self.is_master:
+            # Disarm all known sections
+            sections = self.coordinator.data.get("sections", {})
+            for s_id in sections.keys():
+                await self.coordinator.client.disarm_section(s_id, use_code)
+        else:
+            await self.coordinator.client.disarm_section(self.index, use_code)
 
-class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
-    """Representation of a Unii master alarm controlling all sections."""
-
-    _attr_code_format = CodeFormat.NUMBER
-    _attr_supported_features = (
-        AlarmControlPanelEntityFeature.ARM_AWAY
-    )
-
-    def __init__(self, coordinator, section_ids: list[int], name_suffix: str) -> None:
-        """Initialize the master alarm."""
-        super().__init__(coordinator)
-        self.section_ids = section_ids
-        self._attr_name = f"{coordinator.config_entry.title} {name_suffix}"
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_master"
-
-    @property
-    def alarm_state(self) -> AlarmControlPanelState | None:
-        """Return the composite state of the system."""
-        if not self.coordinator.data or "sections" not in self.coordinator.data:
-            return None
-            
-        states = [self.coordinator.data["sections"].get(sid) for sid in self.section_ids]
-        states = [s for s in states if s is not None]
+    async def async_alarm_arm_away(self, code=None) -> None:
+        """Send arm away command."""
+        # Fallback to stored code
+        use_code = code if code else self._user_code
         
-        if not states:
-            return None
+        if not use_code:
+            _LOGGER.error("No code provided for arm.")
+            return
 
-        if 7 in states: # ALARM
-            return AlarmControlPanelState.TRIGGERED
-        if 9 in states: # ENTRY_TIMER
-            return AlarmControlPanelState.PENDING
-        if 8 in states: # EXIT_TIMER
-            return AlarmControlPanelState.ARMING
-        if all(s == 1 for s in states): # ARMED
-            return AlarmControlPanelState.ARMED_AWAY
-        
-        return AlarmControlPanelState.DISARMED
-
-    async def async_alarm_disarm(self, code: str | None = None) -> None:
-        """Send disarm command to all sections."""
-        client = self.coordinator.client
-        for sid in self.section_ids:
-            await client.disarm_section(sid, code)
-        await self.coordinator.async_request_refresh()
-
-    async def async_alarm_arm_away(self, code: str | None = None) -> None:
-        """Send arm away command to all sections."""
-        client = self.coordinator.client
-        for sid in self.section_ids:
-            await client.arm_section(sid, code)
-        await self.coordinator.async_request_refresh()
-
+        if self.is_master:
+             sections = self.coordinator.data.get("sections", {})
+             for s_id in sections.keys():
+                await self.coordinator.client.arm_section(s_id, use_code)
+        else:
+            await self.coordinator.client.arm_section(self.index, use_code)
