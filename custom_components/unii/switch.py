@@ -67,8 +67,8 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
         """Bypass the input."""
         code = self.coordinator.config_entry.options.get("user_code")
         if not code:
-            _LOGGER.warning("No user code configured in options. Cannot bypass.")
-            return
+            _LOGGER.warning("No user code configured. Falling back to default '1234'.")
+            code = "1234"
 
         client = self.coordinator.client
         
@@ -91,8 +91,8 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
         """Unbypass the input."""
         code = self.coordinator.config_entry.options.get("user_code")
         if not code:
-            _LOGGER.warning("No user code configured in options. Cannot unbypass.")
-            return
+            _LOGGER.warning("No user code configured. Falling back to default '1234'.")
+            code = "1234"
 
         client = self.coordinator.client
         
