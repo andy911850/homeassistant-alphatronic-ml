@@ -276,19 +276,19 @@ class UniiClient:
                     
                     while offset + 22 <= len(data):
                         # Fixed 22-byte Record
-                        # [0-1]  Input ID (Unreliable in later blocks, use calc)
-                        # [2]    Type
-                        # [3]    Reaction
-                        # [4-19] Name (16 bytes)
-                        # [20-21] Flags/Tail
+                        # [0]    Input ID (LSB?)
+                        # [1]    Type
+                        # [2]    Reaction
+                        # [3-18] Name (16 bytes)
+                        # [19-21] Flags/Tail
                         
                         # Calculate Input ID based on block and position
                         input_num = ((block - 1) * 44) + items_in_block + 1
                         
-                        sensor_type = data[offset+2]
-                        reaction = data[offset+3]
+                        sensor_type = data[offset+1]
+                        reaction = data[offset+2]
                         
-                        name_raw = data[offset+4:offset+20]
+                        name_raw = data[offset+3:offset+19]
                         name = name_raw.decode("utf-8", errors="replace").strip()
                         
                         # Filter "VRIJE TEKST" (Empty Zones)
