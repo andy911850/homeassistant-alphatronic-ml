@@ -263,24 +263,41 @@ class UniiClient:
                     version = data[0] # Should be 2
                     # resp_block = struct.unpack(">H", data[1:3])[0]
                     
-                    # Parse Inputs
-                    offset = 3 # Skip Version(1), Block(2)
+                    # Parse Inputs (Fixed 22-byte records for ML/Unii)
+                    # Skip Version(1), Block(2) -> Offset 3
+                    offset = 3 
+                    
                     found_in_block = False
                     
-                    while offset < len(data):
-                        # Each Input Chunk: Number(2)|Type(1)|Reaction(1)|NameLen(1)|Name(N)|Sections(4)
-                        if offset + 5 > len(data): break
+                    # Each block has max 44 inputs (1000 bytes / 22 = ~45)
+                    # Actually 972 bytes payload.
+                    
+                    items_in_block = 0
+                    
+                    while offset + 22 <= len(data):
+                        # Fixed 22-byte Record
+                        # [0-1]  Input ID (Unreliable in later blocks, use calc)
+                        # [2]    Type
+                        # [3]    Reaction
+                        # [4-19] Name (16 bytes)
+                        # [20-21] Flags/Tail
                         
-                        input_num = struct.unpack(">H", data[offset:offset+2])[0]
+                        # Calculate Input ID based on block and position
+                        input_num = ((block - 1) * 44) + items_in_block + 1
+                        
                         sensor_type = data[offset+2]
                         reaction = data[offset+3]
-                        name_len = data[offset+4]
                         
-                        if offset + 5 + name_len + 4 > len(data): break
+                        name_raw = data[offset+4:offset+20]
+                        name = name_raw.decode("utf-8", errors="replace").strip()
                         
-                        name_raw = data[offset+5:offset+5+name_len]
-                        name = name_raw.decode("utf-8", errors="replace").strip() # Original uses decode_and_strip utf-8
-                        
+                        # Filter "VRIJE TEKST" (Empty Zones)
+                        if "VRIJE TEKST" in name:
+                             offset += 22
+                             items_in_block += 1
+                             found_in_block = True # It's a valid block, just empty inputs
+                             continue
+
                         # Store
                         inputs[input_num] = {
                             "name": name,
@@ -288,13 +305,9 @@ class UniiClient:
                             "reaction": reaction
                         }
                         
-                        offset += 9 + name_len
+                        offset += 22
+                        items_in_block += 1
                         found_in_block = True
-                    
-                    if not found_in_block:
-                        break
-                else:
-                    break
                     
         return {"inputs": inputs}
 
