@@ -17,6 +17,7 @@
 """The Unii integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
@@ -29,7 +30,7 @@ from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "1.5.8"
+VERSION = "1.5.15"
 PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -43,74 +44,79 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     client = UniiClient(host, port, shared_key)
     poll_count = [0]  # Mutable counter for closure
+    
+    # Shared lock: prevents poll from disconnecting during arm/disarm
+    operation_lock = asyncio.Lock()
 
     async def async_update_data():
         """Fetch data from Unii."""
         poll_count[0] += 1
         poll_num = poll_count[0]
         
-        try:
-            # Just ensure we're connected — don't force disconnect!
-            # Force disconnect caused a race condition with arm/disarm commands
-            if not await client.connect():
-                await client.disconnect()
-                raise UpdateFailed("Failed to connect to Unii panel")
-            
-            # Poll Section Status
-            section_resp = await client.get_status()
-            
-            if not section_resp:
-                _LOGGER.warning(f"Poll #{poll_num}: Section poll returned None")
-                await client.disconnect()
-                raise UpdateFailed("No section response from panel")
-            
-            data = {"sections": {}, "inputs": {}}
-            
-            if section_resp.get("command") == 0x0117:
-                raw_data = section_resp["data"]
-                offset = 1
-                section_idx = 1
-                while offset + 1 < len(raw_data):
-                    s_state = raw_data[offset]
-                    data["sections"][section_idx] = s_state
-                    section_idx += 1
-                    offset += 2
-                
-                if poll_num <= 5 or poll_num % 20 == 0:
-                    _LOGGER.warning(f"Poll #{poll_num}: Sections={data['sections']} RAW_HEX={raw_data.hex()}")
-            else:
-                _LOGGER.warning(f"Poll #{poll_num}: Unexpected response 0x{section_resp.get('command', 0):04x}")
-
-            # Poll Input Status (best effort)
+        async with operation_lock:
             try:
-                input_resp = await client.get_input_status()
-                if input_resp and input_resp.get("command") == 0x0105:
-                    raw_data = input_resp["data"]
-                    offset = 2
-                    input_idx = 1
+                # Force fresh connection — panel returns stale data on persistent connections
+                await client.disconnect()
+                
+                if not await client.connect():
+                    raise UpdateFailed("Failed to connect to Unii panel")
+                
+                # Poll Section Status
+                section_resp = await client.get_status()
+                
+                if not section_resp:
+                    _LOGGER.warning(f"Poll #{poll_num}: Section poll returned None")
+                    await client.disconnect()
+                    raise UpdateFailed("No section response from panel")
+                
+                data = {"sections": {}, "inputs": {}}
+                
+                if section_resp.get("command") == 0x0117:
+                    raw_data = section_resp["data"]
+                    offset = 1
+                    section_idx = 1
                     while offset + 1 < len(raw_data):
-                        status_byte = raw_data[offset]
-                        status = status_byte & 0x0F
-                        data["inputs"][input_idx] = {
-                            "status": status,
-                            "bypassed": bool(status_byte & 0x10),
-                            "low_battery": bool(status_byte & 0x40),
-                            "name": f"Input {input_idx}",
-                            "sensor_type": 0,
-                        }
-                        input_idx += 1
+                        s_state = raw_data[offset]
+                        data["sections"][section_idx] = s_state
+                        section_idx += 1
                         offset += 2
-            except Exception as e:
-                _LOGGER.debug(f"Poll #{poll_num}: Input poll failed (non-fatal): {e}")
-            
-            # Keep connection open for arm/disarm commands between polls
-            
-            return data
-        except UpdateFailed:
-            raise
-        except Exception as err:
-            await client.disconnect()
-            raise UpdateFailed(f"Poll #{poll_num}: Error: {err}")
+                    
+                    if poll_num <= 5 or poll_num % 20 == 0:
+                        _LOGGER.warning(f"Poll #{poll_num}: Sections={data['sections']} RAW_HEX={raw_data.hex()}")
+                else:
+                    _LOGGER.warning(f"Poll #{poll_num}: Unexpected response 0x{section_resp.get('command', 0):04x}")
+
+                # Poll Input Status (best effort)
+                try:
+                    input_resp = await client.get_input_status()
+                    if input_resp and input_resp.get("command") == 0x0105:
+                        raw_data = input_resp["data"]
+                        offset = 2
+                        input_idx = 1
+                        while offset + 1 < len(raw_data):
+                            status_byte = raw_data[offset]
+                            status = status_byte & 0x0F
+                            data["inputs"][input_idx] = {
+                                "status": status,
+                                "bypassed": bool(status_byte & 0x10),
+                                "low_battery": bool(status_byte & 0x40),
+                                "name": f"Input {input_idx}",
+                                "sensor_type": 0,
+                            }
+                            input_idx += 1
+                            offset += 2
+                except Exception as e:
+                    _LOGGER.debug(f"Poll #{poll_num}: Input poll failed (non-fatal): {e}")
+                
+                # Keep connection open — arm/disarm needs it
+                # (but next poll will force disconnect for fresh data)
+                
+                return data
+            except UpdateFailed:
+                raise
+            except Exception as err:
+                await client.disconnect()
+                raise UpdateFailed(f"Poll #{poll_num}: Error: {err}")
 
     coordinator = DataUpdateCoordinator(
         hass,
@@ -121,6 +127,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinator.client = client 
     coordinator.input_arrangement = {}
+    coordinator.operation_lock = operation_lock  # Share lock with entities
 
     await coordinator.async_config_entry_first_refresh()
 

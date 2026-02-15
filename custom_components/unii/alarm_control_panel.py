@@ -100,9 +100,6 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.warning(f"Section {self.section_id}: Unknown state value {sec_state}, defaulting to DISARMED")
             return AlarmControlPanelState.DISARMED
         
-        if self.section_id == 1:
-            _LOGGER.debug(f"Section 1: raw={sec_state} -> mapped={mapped}")
-        
         return mapped
 
     async def async_alarm_disarm(self, code=None) -> None:
@@ -113,10 +110,16 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for disarm.")
             return
 
-        _LOGGER.warning(f"Disarming section {self.section_id}...")
-        client = self.coordinator.client
-        result = await client.disarm_section(self.section_id, use_code)
-        _LOGGER.warning(f"Disarm section {self.section_id} result: {result}")
+        # Acquire shared lock so poll can't disconnect during our command
+        async with self.coordinator.operation_lock:
+            _LOGGER.warning(f"Disarming section {self.section_id}...")
+            client = self.coordinator.client
+            # Ensure connected
+            if not await client.connect():
+                _LOGGER.error(f"Cannot disarm section {self.section_id}: not connected")
+                return
+            result = await client.disarm_section(self.section_id, use_code)
+            _LOGGER.warning(f"Disarm section {self.section_id} result: {result}")
         await self.coordinator.async_request_refresh()
 
     async def async_alarm_arm_away(self, code=None) -> None:
@@ -127,10 +130,16 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for arm.")
             return
 
-        _LOGGER.warning(f"Arming section {self.section_id}...")
-        client = self.coordinator.client
-        result = await client.arm_section(self.section_id, use_code)
-        _LOGGER.warning(f"Arm section {self.section_id} result: {result}")
+        # Acquire shared lock so poll can't disconnect during our command
+        async with self.coordinator.operation_lock:
+            _LOGGER.warning(f"Arming section {self.section_id}...")
+            client = self.coordinator.client
+            # Ensure connected
+            if not await client.connect():
+                _LOGGER.error(f"Cannot arm section {self.section_id}: not connected")
+                return
+            result = await client.arm_section(self.section_id, use_code)
+            _LOGGER.warning(f"Arm section {self.section_id} result: {result}")
         await self.coordinator.async_request_refresh()
 
 
@@ -182,13 +191,14 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             return None
 
         # Priority: Triggered > Pending > Arming > Armed > Disarmed
+        # Using actual panel values: 1=Armed, 2=Disarmed
         if 5 in states:
             return AlarmControlPanelState.TRIGGERED
         if 4 in states:
             return AlarmControlPanelState.PENDING
         if 3 in states:
             return AlarmControlPanelState.ARMING
-        if any(s == 2 for s in states):
+        if any(s == 1 for s in states):
             return AlarmControlPanelState.ARMED_AWAY
         
         return AlarmControlPanelState.DISARMED
@@ -200,11 +210,16 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for disarm.")
             return
 
-        client = self.coordinator.client
-        for sid in self.section_ids:
-            _LOGGER.warning(f"Master: Disarming section {sid}...")
-            result = await client.disarm_section(sid, use_code)
-            _LOGGER.warning(f"Master: Disarm section {sid} result: {result}")
+        # Acquire shared lock so poll can't disconnect during our commands
+        async with self.coordinator.operation_lock:
+            client = self.coordinator.client
+            if not await client.connect():
+                _LOGGER.error("Cannot disarm: not connected")
+                return
+            for sid in self.section_ids:
+                _LOGGER.warning(f"Master: Disarming section {sid}...")
+                result = await client.disarm_section(sid, use_code)
+                _LOGGER.warning(f"Master: Disarm section {sid} result: {result}")
         await self.coordinator.async_request_refresh()
 
     async def async_alarm_arm_away(self, code=None) -> None:
@@ -214,9 +229,14 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             _LOGGER.error("No code provided for arm.")
             return
 
-        client = self.coordinator.client
-        for sid in self.section_ids:
-            _LOGGER.warning(f"Master: Arming section {sid}...")
-            result = await client.arm_section(sid, use_code)
-            _LOGGER.warning(f"Master: Arm section {sid} result: {result}")
+        # Acquire shared lock so poll can't disconnect during our commands
+        async with self.coordinator.operation_lock:
+            client = self.coordinator.client
+            if not await client.connect():
+                _LOGGER.error("Cannot arm: not connected")
+                return
+            for sid in self.section_ids:
+                _LOGGER.warning(f"Master: Arming section {sid}...")
+                result = await client.arm_section(sid, use_code)
+                _LOGGER.warning(f"Master: Arm section {sid} result: {result}")
         await self.coordinator.async_request_refresh()
