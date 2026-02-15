@@ -240,6 +240,9 @@ class UniiClient:
         # Loop to fetch all blocks
         while True:
             block += 1
+            if block > 50: # Safety break to prevent infinite loops from garbage data
+                _LOGGER.warning("Max input blocks (50) reached, stopping download.")
+                break
             # Request Input Arrangement (0x0140)
             # Payload: Block Number (2b) ONLY (No version byte in request)
             payload = struct.pack(">H", block)
