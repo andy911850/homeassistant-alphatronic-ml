@@ -50,10 +50,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         poll_num = poll_count[0]
         
         try:
-            # FORCE fresh connection every poll — eliminates stale connection issues
-            await client.disconnect()
-            
+            # Just ensure we're connected — don't force disconnect!
+            # Force disconnect caused a race condition with arm/disarm commands
             if not await client.connect():
+                await client.disconnect()
                 raise UpdateFailed("Failed to connect to Unii panel")
             
             # Poll Section Status
