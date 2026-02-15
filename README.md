@@ -3,7 +3,7 @@
 This is a specialized Home Assistant integration designed for **Alphatronics ML** and **UNii** alarm systems. 
 It communicates via the local network (Port 6502) using a reverse-engineered binary protocol, specifically optimized for the **ML Series** panels.
 
-**Current Version: v1.6.0**
+**Current Version: v1.6.5**
 
 ## Key Features
 
@@ -56,7 +56,8 @@ If you see a "Connection failed" error:
 ### Bypass Switch Issues
 If you cannot toggle bypass switches:
 1.  Ensure you have entered a **User Code** in the integration configuration.
-2.  Update to **v1.6.0+** which allows fallback to default code '1234' and supports standard protocol formats.
+2.  Update to **v1.6.5+** which fixes event race conditions and supports standard protocol formats.
+3.  **Check User Level**: The User Code must belong to a user with **Level 7 (Manager)** or higher permissions. Standard users cannot bypass inputs.
 
 ## Acknowledgments & License
 
