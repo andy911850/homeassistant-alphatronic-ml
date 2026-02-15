@@ -209,7 +209,7 @@ class UniiClient:
                 continue
                 
             except asyncio.TimeoutError:
-                _LOGGER.warning(f"Receive Timeout (waiting for 0x{expected_cmd:04x})" if expected_cmd else "Receive Timeout")
+                _LOGGER.error(f"Receive Timeout (waiting for 0x{expected_cmd:04x})" if expected_cmd else "Receive Timeout")
                 return None
             except Exception as e:
                 _LOGGER.error(f"Recv Failed: {e}")
@@ -311,6 +311,9 @@ class UniiClient:
             payload = bytearray([0x00])
             payload.extend(self._bcd_encode(user_code))
             payload.extend(struct.pack(">H", input_id))
+
+            _LOGGER.info(f"Sending Bypass Command: 0x0118 Payload: {binascii.hexlify(payload)}")
+            
             if await self._send_command(0x0118, payload):
                 return await self._recv_response(expected_cmd=0x0119)
             return None
@@ -321,6 +324,9 @@ class UniiClient:
             payload = bytearray([0x00])
             payload.extend(self._bcd_encode(user_code))
             payload.extend(struct.pack(">H", input_id))
+
+            _LOGGER.info(f"Sending Unbypass Command: 0x011A Payload: {binascii.hexlify(payload)}")
+
             if await self._send_command(0x011A, payload):
                 return await self._recv_response(expected_cmd=0x011B)
             return None
