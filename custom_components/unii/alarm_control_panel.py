@@ -40,20 +40,14 @@ async def async_setup_entry(
     """Set up Unii alarm control panel from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     
-    # Detect sections from first poll data
-    sections_data = coordinator.data.get("sections", {}) if coordinator.data else {}
-    section_ids = sorted(sections_data.keys()) if sections_data else [1, 2]
+    # Hardcoded Section 1, Section 2, and Master
+    sections = [
+        UniiAlarm(coordinator, 1, "Section 1", entry),
+        UniiAlarm(coordinator, 2, "Section 2", entry),
+        UniiMasterAlarm(coordinator, [1, 2], "Master", entry),
+    ]
     
-    _LOGGER.warning(f"Creating alarm entities for sections: {section_ids}")
-    
-    entities = []
-    for sid in section_ids:
-        entities.append(UniiAlarm(coordinator, sid, f"Section {sid}", entry))
-    
-    # Master alarm covering all sections
-    entities.append(UniiMasterAlarm(coordinator, section_ids, "Master", entry))
-    
-    async_add_entities(entities)
+    async_add_entities(sections)
 
 
 class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
