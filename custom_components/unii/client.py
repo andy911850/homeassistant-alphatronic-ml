@@ -240,53 +240,34 @@ class UniiClient:
         """Fetch input arrangement (all blocks)."""
         inputs = {}
         block = 0
+        empty_blocks = 0  # Count consecutive blocks with no records
         
-        # Loop to fetch all blocks
-        while True:
-            block += 1
-            if block > 50: # Safety break to prevent infinite loops from garbage data
-                _LOGGER.warning("Max input blocks (50) reached, stopping download.")
-                break
-            # Request Input Arrangement (0x0140)
-            # Payload: Block Number (2b) ONLY (No version byte in request)
-            payload = struct.pack(">H", block)
-            
-            async with self._transaction_lock:
+        async with self._transaction_lock:
+            while True:
+                block += 1
+                if block > 20:  # Safety limit
+                    _LOGGER.warning("Max input blocks (20) reached, stopping.")
+                    break
+                
+                payload = struct.pack(">H", block)
+                
                 if await self._send_command(0x0140, payload):
-                    resp = await self._recv_response(expected_cmd=0x0141)
+                    resp = await self._recv_response(expected_cmd=0x0141, timeout=3)
                     if not resp:
+                        _LOGGER.debug(f"No response for block {block}, stopping.")
                         break
                     
                     data = resp['data']
-                    # Response: Cmd(2)|Len(2)|Version(1)|Block(2)|Inputs...
-                    # _recv_response returns data payload starting at Version
                     
                     if len(data) < 3:
+                        _LOGGER.debug(f"Block {block} too short ({len(data)} bytes), stopping.")
                         break
-                        
-                    version = data[0] # Should be 2
-                    # resp_block = struct.unpack(">H", data[1:3])[0]
                     
-                    # Parse Inputs (Fixed 22-byte records for ML/Unii)
-                    # Skip Version(1), Block(2) -> Offset 3
-                    offset = 3 
-                    
-                    found_in_block = False
-                    
-                    # Each block has max 44 inputs (1000 bytes / 22 = ~45)
-                    # Actually 972 bytes payload.
-                    
+                    version = data[0]
+                    offset = 3
                     items_in_block = 0
                     
                     while offset + 22 <= len(data):
-                        # Fixed 22-byte Record
-                        # [0]    Input ID (LSB?)
-                        # [1]    Type
-                        # [2]    Reaction
-                        # [3-18] Name (16 bytes)
-                        # [19-21] Flags/Tail
-                        
-                        # Calculate Input ID based on block and position
                         input_num = ((block - 1) * 44) + items_in_block + 1
                         
                         sensor_type = data[offset+1]
@@ -295,14 +276,12 @@ class UniiClient:
                         name_raw = data[offset+3:offset+19]
                         name = name_raw.decode("utf-8", errors="replace").strip()
                         
-                        # Filter "VRIJE TEKST" (Empty Zones)
-                        if "VRIJE TEKST" in name:
-                             offset += 22
-                             items_in_block += 1
-                             found_in_block = True # It's a valid block, just empty inputs
-                             continue
+                        # Skip empty zones
+                        if "VRIJE TEKST" in name or name == "" or all(c == '\x00' for c in name):
+                            offset += 22
+                            items_in_block += 1
+                            continue
 
-                        # Store
                         inputs[input_num] = {
                             "name": name,
                             "sensor_type": sensor_type,
@@ -311,8 +290,18 @@ class UniiClient:
                         
                         offset += 22
                         items_in_block += 1
-                        found_in_block = True
                     
+                    if items_in_block == 0:
+                        # Block had no records at all — we've passed the end
+                        _LOGGER.debug(f"Block {block} had no records, stopping.")
+                        break
+                    
+                    _LOGGER.debug(f"Block {block}: {items_in_block} records parsed, {len(inputs)} total inputs.")
+                else:
+                    _LOGGER.warning(f"Failed to send arrangement request for block {block}")
+                    break
+        
+        _LOGGER.info(f"Input arrangement download complete: {len(inputs)} inputs from {block} blocks.")
         return {"inputs": inputs}
 
     async def bypass_input(self, input_id, user_code):
