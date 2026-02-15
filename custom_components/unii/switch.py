@@ -65,21 +65,45 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Bypass the input."""
-        # Use a "dummy" or stored code for bypass if not provided?
-        # For now, we'll try to use a common code if available in config, 
-        # or we might need the user to provide it via service.
-        # UNii typically needs a valid user code.
-        # We'll see if the user provides feedback on where to get the code.
-        _LOGGER.warning("Bypass requires a user code. Attempting with default if available.")
-        # Placeholder for code retrieval
-        code = "1234" # Should be configurable
+        code = self.coordinator.config_entry.options.get("user_code")
+        if not code:
+            _LOGGER.warning("No user code configured in options. Cannot bypass.")
+            return
+
         client = self.coordinator.client
-        await client.bypass_input(self._input_id, code)
+        
+        # Use shared lock to prevent collision with poll
+        async with self.coordinator.operation_lock:
+            try:
+                if not await client.connect():
+                    _LOGGER.error("Could not connect to panel for bypass command")
+                    return
+                
+                await client.bypass_input(self._input_id, code)
+            except Exception as e:
+                _LOGGER.error(f"Failed to bypass input {self._input_id}: {e}")
+                # Ensure we don't leave a broken connection? 
+                # The poll loop handles force disconnect anyway.
+
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Unbypass the input."""
-        code = "1234" # Should be configurable
+        code = self.coordinator.config_entry.options.get("user_code")
+        if not code:
+            _LOGGER.warning("No user code configured in options. Cannot unbypass.")
+            return
+
         client = self.coordinator.client
-        await client.unbypass_input(self._input_id, code)
+        
+        async with self.coordinator.operation_lock:
+            try:
+                if not await client.connect():
+                    _LOGGER.error("Could not connect to panel for unbypass command")
+                    return
+                
+                await client.unbypass_input(self._input_id, code)
+            except Exception as e:
+                _LOGGER.error(f"Failed to unbypass input {self._input_id}: {e}")
+
         await self.coordinator.async_request_refresh()
