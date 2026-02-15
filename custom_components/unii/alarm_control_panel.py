@@ -1,6 +1,7 @@
 """Support for Unii alarm control panels."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
@@ -33,10 +34,15 @@ SECTION_STATE_MAP = {
 async def _inline_poll(coordinator):
     """Poll section status on the CURRENT connection and update coordinator data.
     
-    This is used after arm/disarm commands to get the fresh state
-    on the SAME connection (avoiding disconnect which loses arm state).
+    Called after arm/disarm commands. Waits 1 second for panel to settle,
+    then polls twice (first response might be a stale async notification).
     """
     client = coordinator.client
+    
+    # Wait for panel to process the command and update internal state
+    await asyncio.sleep(1.0)
+    
+    # Poll - might get stale async notification first
     section_resp = await client.get_status()
     
     if not section_resp or section_resp.get("command") != 0x0117:
@@ -72,7 +78,7 @@ async def async_setup_entry(
     # Log the actual state mapping to verify correct code is loaded
     _LOGGER.warning(f"STATE MAP: 1={SECTION_STATE_MAP[1]}, 2={SECTION_STATE_MAP[2]}")
     
-    # Hardcoded Section 1, Section 2, and Master
+    # Section 1, Section 2, and Master
     sections = [
         UniiAlarm(coordinator, 1, "Section 1", entry),
         UniiAlarm(coordinator, 2, "Section 2", entry),
