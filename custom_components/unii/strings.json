@@ -20,7 +20,8 @@
             "init": {
                 "title": "Configure Alphatronics UNii",
                 "data": {
-                    "user_code": "User Code (for one-click arm/disarm)"
+                    "user_code": "User Code (for one-click arm/disarm)",
+                    "protocol_version": "Protocol Version (Use 'legacy' for older ML panels)"
                 }
             }
         }

@@ -10,7 +10,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
 
-from .const import DOMAIN, CONF_SHARED_KEY, CONF_USER_CODE, DEFAULT_PORT
+from .const import DOMAIN, CONF_SHARED_KEY, CONF_USER_CODE, DEFAULT_PORT, CONF_PROTOCOL_VERSION, PROTOCOL_STANDARD, PROTOCOL_LEGACY
 from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -77,12 +77,14 @@ class UniiOptionsFlowHandler(config_entries.OptionsFlow):
         # Get current stored code
         raw_code = self.config_entry.data.get(CONF_USER_CODE)
         current_code = str(raw_code) if raw_code is not None else ""
+        current_protocol = self.config_entry.data.get(CONF_PROTOCOL_VERSION, PROTOCOL_STANDARD)
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
                     vol.Optional(CONF_USER_CODE, default=current_code): str,
+                    vol.Optional(CONF_PROTOCOL_VERSION, default=current_protocol): vol.In([PROTOCOL_STANDARD, PROTOCOL_LEGACY]),
                 }
             ),
         )

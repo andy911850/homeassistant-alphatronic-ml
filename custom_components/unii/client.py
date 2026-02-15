@@ -25,10 +25,11 @@ from Crypto.Util import Counter
 _LOGGER = logging.getLogger(__name__)
 
 class UniiClient:
-    def __init__(self, ip, port=6502, shared_key=None):
+    def __init__(self, ip, port=6502, shared_key=None, use_legacy_protocol=False):
         self.ip = ip
         self.port = port
         self.shared_key = shared_key
+        self.use_legacy_protocol = use_legacy_protocol
         self.reader = None
         self.writer = None
         self.session_id = 0xFFFF
@@ -332,10 +333,17 @@ class UniiClient:
             return None
         
     def _bcd_encode(self, data):
-        # Original 16-digit version for arm/disarm
+        # Legacy: 8 digits (4 bytes). Standard: 16 digits (8 bytes).
+        target_len = 8 if self.use_legacy_protocol else 16
+        
         s = str(data)
-        while len(s) < 16:
+        # Pad with 0
+        while len(s) < target_len:
             s += "0"
+        # Truncate if too long
+        if len(s) > target_len:
+            s = s[:target_len]
+            
         return bytes.fromhex(s)
 
     def _bcd_encode_v2(self, data):
