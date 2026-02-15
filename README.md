@@ -75,6 +75,11 @@ If you see a "Connection failed" error or the integration fails to add:
     *   Wait **10-15 seconds**.
     *   Reconnect power.
 
+### "Arming requires a code but none was given"
+If you see this error after adding your User Code:
+*   **Update to v1.3.2**: A fix was released to correct how the user code is read by the buttons.
+*   **Restart Home Assistant**: Ensure the new code is loaded.
+
 ## Requirements
 
 *   **pycryptodome**: Automatically installed as a dependency.
