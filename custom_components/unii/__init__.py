@@ -113,6 +113,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     input_resp = await client.get_input_status()
                     if input_resp and input_resp.get("command") == 0x0105:
                         raw_data = input_resp["data"]
+                        
+                        # Log raw input data every 5 polls to debug state changes
+                        if poll_num <= 5 or poll_num % 10 == 0:
+                            _LOGGER.warning(f"Poll #{poll_num}: Inputs RAW_HEX={raw_data.hex()}")
+
                         offset = 2
                         input_idx = 1
                         while offset + 1 < len(raw_data):
@@ -122,11 +127,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             # Only include inputs with arrangement data (skip VRIJE TEKST etc.)
                             arr_info = input_arrangement.get(input_idx)
                             if arr_info:
+                                name = arr_info.get("name", f"Input {input_idx}")
+                                is_open = (status & 0x01) == 0x01
+                                
+                                # Log state for first few inputs to check bitmask
+                                if input_idx <= 3 and (poll_num <= 5 or poll_num % 10 == 0):
+                                     _LOGGER.warning(f"  Input {input_idx} ({name}): StatusByte={status_byte:02x} State={status} Open={is_open}")
+
                                 data["inputs"][input_idx] = {
                                     "status": status,
                                     "bypassed": bool(status_byte & 0x10),
                                     "low_battery": bool(status_byte & 0x40),
-                                    "name": arr_info.get("name", f"Input {input_idx}"),
+                                    "name": name,
                                     "sensor_type": arr_info.get("sensor_type", 0),
                                 }
                             input_idx += 1
