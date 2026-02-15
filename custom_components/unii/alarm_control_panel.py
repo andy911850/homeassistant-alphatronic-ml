@@ -27,9 +27,9 @@ async def async_setup_entry(
     
     # Create alarms for Section 1 and 2, and a Master
     sections = [
-        UniiAlarm(coordinator, 1, "Section 1"),
-        UniiAlarm(coordinator, 2, "Section 2"),
-        UniiMasterAlarm(coordinator, [1, 2], "Master"),
+        UniiAlarm(coordinator, 1, "Section 1", entry),
+        UniiAlarm(coordinator, 2, "Section 2", entry),
+        UniiMasterAlarm(coordinator, [1, 2], "Master", entry),
     ]
     
     async_add_entities(sections)
@@ -43,13 +43,18 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         AlarmControlPanelEntityFeature.ARM_AWAY
     )
 
-    def __init__(self, coordinator, section_id: int, name_suffix: str) -> None:
+    def __init__(self, coordinator, section_id: int, name_suffix: str, entry: ConfigEntry) -> None:
         """Initialize the alarm."""
         super().__init__(coordinator)
         self.section_id = section_id
         self._attr_name = name_suffix
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_section_{section_id}"
-        self._user_code = coordinator.config_entry.data.get(CONF_USER_CODE)
+        self._attr_unique_id = f"{entry.entry_id}_section_{section_id}"
+        
+        self._user_code = entry.data.get(CONF_USER_CODE)
+        if self._user_code:
+             _LOGGER.debug(f"UniiAlarm {section_id}: Stored user code found (Length {len(self._user_code)})")
+        else:
+             _LOGGER.debug(f"UniiAlarm {section_id}: No stored user code found.")
 
     @property
     def code_format(self) -> CodeFormat | None:
@@ -122,13 +127,18 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         AlarmControlPanelEntityFeature.ARM_AWAY
     )
 
-    def __init__(self, coordinator, section_ids: list[int], name_suffix: str) -> None:
+    def __init__(self, coordinator, section_ids: list[int], name_suffix: str, entry: ConfigEntry) -> None:
         """Initialize the master alarm."""
         super().__init__(coordinator)
         self.section_ids = section_ids
         self._attr_name = name_suffix
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_master"
-        self._user_code = coordinator.config_entry.data.get(CONF_USER_CODE)
+        self._attr_unique_id = f"{entry.entry_id}_master"
+        
+        self._user_code = entry.data.get(CONF_USER_CODE)
+        if self._user_code:
+             _LOGGER.debug(f"UniiMasterAlarm: Stored user code found (Length {len(self._user_code)})")
+        else:
+             _LOGGER.debug("UniiMasterAlarm: No stored user code found.")
 
     @property
     def code_format(self) -> CodeFormat | None:
