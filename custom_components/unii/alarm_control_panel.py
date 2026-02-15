@@ -68,6 +68,11 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         return CodeFormat.NUMBER
 
     @property
+    def code_arm_required(self) -> bool:
+        """Whether the code is required for arm actions."""
+        return not bool(self._user_code)
+
+    @property
     def state(self) -> AlarmControlPanelState | None:
         """Return the state of the device."""
         if not self.coordinator.data or "sections" not in self.coordinator.data:
@@ -158,6 +163,11 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         if self._user_code:
             return None
         return CodeFormat.NUMBER
+
+    @property
+    def code_arm_required(self) -> bool:
+        """Whether the code is required for arm actions."""
+        return not bool(self._user_code)
 
     @property
     def state(self) -> AlarmControlPanelState | None:
