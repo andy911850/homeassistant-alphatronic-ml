@@ -25,12 +25,12 @@ from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, CONF_SHARED_KEY, CONF_PROTOCOL_VERSION, PROTOCOL_LEGACY
+from .const import DOMAIN, CONF_SHARED_KEY
 from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "1.6.3"
+VERSION = "1.6.4"
 PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -40,13 +40,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     host = entry.data[CONF_HOST]
     port = entry.data[CONF_PORT]
-    shared_key = entry.data.get(CONF_SHARED_KEY)
+    # Check Shared Key Override in Options
+    shared_key = entry.options.get(CONF_SHARED_KEY, entry.data.get(CONF_SHARED_KEY))
 
-    # Check Protocol Version
-    protocol_version = entry.options.get(CONF_PROTOCOL_VERSION, entry.data.get(CONF_PROTOCOL_VERSION))
-    use_legacy = (protocol_version == PROTOCOL_LEGACY)
-
-    client = UniiClient(host, port, shared_key, use_legacy_protocol=use_legacy)
+    client = UniiClient(host, port, shared_key)
     poll_count = [0]  # Mutable counter for closure
     
     # Shared lock: prevents poll from disconnecting during arm/disarm

@@ -21,7 +21,7 @@
                 "title": "Configure Alphatronics UNii",
                 "data": {
                     "user_code": "User Code (for one-click arm/disarm)",
-                    "protocol_version": "Protocol Version (Use 'legacy' for older ML panels)"
+                    "shared_key": "Shared Key (Encryption Key - Optional)"
                 }
             }
         }
