@@ -76,9 +76,13 @@ If you see a "Connection failed" error or the integration fails to add:
     *   Reconnect power.
 
 ### "Arming requires a code but none was given"
-If you see this error after adding your User Code:
-*   **Update to v1.3.3**: A robust fix was released to handle code format issues.
-*   **Restart Home Assistant**: Ensure the new code is loaded.
+### "Arming requires a code but none was given"
+This means the integration cannot find a stored User Code.
+
+1.  Click **Configure** on the integration.
+2.  Enter your **User Code**.
+3.  Click **Submit**.
+4.  **Restart Home Assistant**.
 
 ## Requirements
 
