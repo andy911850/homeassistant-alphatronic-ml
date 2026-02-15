@@ -1,15 +1,17 @@
-# Alphatronics UNii (Custom Component)
+# Alphatronics ML / UNii (Custom Component)
 
-This is a standalone, performance-optimized Home Assistant custom component for the **Alphatronics UNii** alarm system. It communicates via the local network (Port 6502) using a reverse-engineered binary protocol with AES-CTR encryption support.
+This is a specialized Home Assistant integration designed for **Alphatronics ML** and **UNii** alarm systems. 
+It communicates via the local network (Port 6502) using a reverse-engineered binary protocol, specifically adapted to support the unique data format of the **ML Series** panels.
 
-## v1.2.3 Features
+## Key Features
 
-*   **Robust Protocol**: Corrected implementation of the UNii communication protocol (Input Arrangement), ensuring reliable connection even with complex panel configurations.
+*   **ML Series Support**: Custom protocol handler for the **Alphatronics ML** legacy firmware (22-byte fixed-width zones, 2-byte status stride).
+*   **Smart Filtering**: automatically hides empty "VRIJE TEKST" zones, keeping your dashboard clean.
+*   **Robust Protocol**: Corrected implementation of the communication protocol (Input Arrangement), ensuring reliable connection even with complex panel configurations.
 *   **Multi-Section Support**: Control individual alarm sections (e.g., Section 1, Section 2) independently.
 *   **Master Control**: A composite Alarm Control Panel entity that monitors and controls the entire system.
 *   **Intelligent Zone Monitoring**:
-    *   **Automatic Naming**: Zones automatically use the names programmed on your UNii panel (e.g., "Hallway PIR").
-    *   **Strict Filtering**: Only active, security-relevant zones are shown. Diagnostic, technical, and unprogrammed slots are automatically hidden.
+    *   **Automatic Naming**: Zones automatically use the names programmed on your panel (e.g., "Hallway PIR").
     *   **States**: Clear, Open, Bypassed.
     *   **Diagnostics**: Tamper detection, Anti-masking status, and Low Battery alerts.
 *   **Bypass Switches**: 
