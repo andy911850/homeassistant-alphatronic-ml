@@ -30,7 +30,7 @@ from .client import UniiClient
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "1.5.15"
+VERSION = "1.5.19"
 PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -47,6 +47,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Shared lock: prevents poll from disconnecting during arm/disarm
     operation_lock = asyncio.Lock()
+
+    # Download input arrangement (zone names) once at startup
+    # Uses a separate connection that is cleanly closed after download
+    input_arrangement = {}
+    try:
+        _LOGGER.warning("Downloading input arrangement (zone names)...")
+        if await client.connect():
+            arr_data = await client.get_input_arrangement()
+            if arr_data and "inputs" in arr_data:
+                input_arrangement = arr_data["inputs"]
+                _LOGGER.warning(f"Input arrangement: {len(input_arrangement)} zones loaded")
+                for inp_id, inp_data in input_arrangement.items():
+                    _LOGGER.info(f"  Zone {inp_id}: {inp_data.get('name', '?')}")
+            else:
+                _LOGGER.warning("No input arrangement data received")
+            await client.disconnect()
+        else:
+            _LOGGER.warning("Could not connect for arrangement download")
+    except Exception as e:
+        _LOGGER.warning(f"Arrangement download failed (non-fatal): {e}")
+        await client.disconnect()
 
     async def async_update_data():
         """Fetch data from Unii."""
@@ -87,6 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     _LOGGER.warning(f"Poll #{poll_num}: Unexpected response 0x{section_resp.get('command', 0):04x}")
 
                 # Poll Input Status (best effort)
+                # Only include inputs that have arrangement data (real zones)
                 try:
                     input_resp = await client.get_input_status()
                     if input_resp and input_resp.get("command") == 0x0105:
@@ -96,20 +118,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         while offset + 1 < len(raw_data):
                             status_byte = raw_data[offset]
                             status = status_byte & 0x0F
-                            data["inputs"][input_idx] = {
-                                "status": status,
-                                "bypassed": bool(status_byte & 0x10),
-                                "low_battery": bool(status_byte & 0x40),
-                                "name": f"Input {input_idx}",
-                                "sensor_type": 0,
-                            }
+                            
+                            # Only include inputs with arrangement data (skip VRIJE TEKST etc.)
+                            arr_info = input_arrangement.get(input_idx)
+                            if arr_info:
+                                data["inputs"][input_idx] = {
+                                    "status": status,
+                                    "bypassed": bool(status_byte & 0x10),
+                                    "low_battery": bool(status_byte & 0x40),
+                                    "name": arr_info.get("name", f"Input {input_idx}"),
+                                    "sensor_type": arr_info.get("sensor_type", 0),
+                                }
                             input_idx += 1
                             offset += 2
                 except Exception as e:
                     _LOGGER.debug(f"Poll #{poll_num}: Input poll failed (non-fatal): {e}")
-                
-                # Keep connection open — arm/disarm needs it
-                # (but next poll will force disconnect for fresh data)
                 
                 return data
             except UpdateFailed:
@@ -126,7 +149,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_interval=timedelta(seconds=5),
     )
     coordinator.client = client 
-    coordinator.input_arrangement = {}
+    coordinator.input_arrangement = input_arrangement
     coordinator.operation_lock = operation_lock  # Share lock with entities
 
     await coordinator.async_config_entry_first_refresh()
