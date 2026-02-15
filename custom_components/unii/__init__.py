@@ -73,38 +73,55 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             
             if section_resp and section_resp.get("command") == 0x0117:
                 raw_data = section_resp["data"]
-                for i in range(0, len(raw_data), 2):
-                    if i+1 >= len(raw_data): break
-                    s_id = raw_data[i]
-                    s_state = raw_data[i+1]
-                    data["sections"][s_id] = s_state
+                # ML Protocol detection: 
+                # If raw_data looks like Version(1) + [Status(1) + Padding(1)]...
+                # Iterate with stride 2, skipping version?
+                # Raw: 01 02 ff 02 ff...
+                # Skip version (index 0)
+                offset = 1
+                section_idx = 1
+                while offset + 1 < len(raw_data):
+                    s_state = raw_data[offset]
+                    # padding = raw_data[offset+1] # usually 0xFF or 0x00
+                    data["sections"][section_idx] = s_state
+                    section_idx += 1
+                    offset += 2
             
             if input_resp and input_resp.get("command") == 0x0105:
                 raw_data = input_resp["data"]
-                for i, status_byte in enumerate(raw_data[2:]):
-                    input_id = i + 1
+                # ML Protocol: Header(2) + [Status(1) + Suffix(1)]...
+                # Raw: 00 01 00 0f 00 0f...
+                # Skip Header (index 0-1)
+                offset = 2
+                input_idx = 1
+                
+                while offset + 1 < len(raw_data):
+                    status_byte = raw_data[offset]
+                    # suffix = raw_data[offset+1] # usually 0x0F
                     
-                    info = coordinator.input_arrangement.get(input_id)
+                    # Look up arrangement
+                    info = coordinator.input_arrangement.get(input_idx)
                     
-                    # Strict Filter: Must be in arrangement AND not Type 0/8/9
-                    if not info:
-                        continue
-                        
-                    stype = info.get("sensor_type", 0)
-                    if stype in [0, 8, 9]:
-                        continue
-                        
-                    status = status_byte & 0x0F
-                    if status == 0x0F: # Disabled status
-                        continue
-                        
-                    data["inputs"][input_id] = {
-                        "status": status,
-                        "bypassed": bool(status_byte & 0x10),
-                        "low_battery": bool(status_byte & 0x40),
-                        "name": info.get("name", f"Input {input_id}"),
-                        "sensor_type": stype,
-                    }
+                    if info:
+                         stype = info.get("sensor_type", 0)
+                         # Filter Types 0, 8, 9 if needed?
+                         # For now trusting arrangement exists check.
+                         
+                         status = status_byte & 0x0F
+                         # Only filter if status is literally "Disabled" (0x0F)?
+                         # If suffix is 0x0F, don't confuse it with status.
+                         # But status 0x00 is Closed?
+                         
+                         data["inputs"][input_idx] = {
+                            "status": status,
+                            "bypassed": bool(status_byte & 0x10), # Guessing flags same
+                            "low_battery": bool(status_byte & 0x40),
+                            "name": info.get("name", f"Input {input_idx}"),
+                            "sensor_type": stype,
+                        }
+                    
+                    input_idx += 1
+                    offset += 2
             
             return data
         except Exception as err:
