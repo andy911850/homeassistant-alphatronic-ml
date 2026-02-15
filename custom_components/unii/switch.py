@@ -65,7 +65,11 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Bypass the input."""
-        code = self.coordinator.config_entry.options.get("user_code")
+        # Check data first (primary storage per config_flow.py)
+        code = self.coordinator.config_entry.data.get("user_code")
+        if not code:
+            code = self.coordinator.config_entry.options.get("user_code")
+            
         if not code:
             _LOGGER.warning("No user code configured. Falling back to default '1234'.")
             code = "1234"
@@ -89,7 +93,11 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Unbypass the input."""
-        code = self.coordinator.config_entry.options.get("user_code")
+        # Check data first (primary storage per config_flow.py)
+        code = self.coordinator.config_entry.data.get("user_code")
+        if not code:
+            code = self.coordinator.config_entry.options.get("user_code")
+            
         if not code:
             _LOGGER.warning("No user code configured. Falling back to default '1234'.")
             code = "1234"
