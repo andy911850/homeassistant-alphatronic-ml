@@ -171,49 +171,53 @@ class UniiClient:
             return False
 
     async def _recv_response(self, expected_cmd=None, timeout=5):
-        try:
-            # Header
-            header = await asyncio.wait_for(self.reader.readexactly(14), timeout=timeout)
-            
-            # Length
-            length = struct.unpack(">H", header[12:14])[0]
-            remaining = length - 14
-            
-            body = await asyncio.wait_for(self.reader.readexactly(remaining), timeout=timeout)
-            
-            # Decrypt
-            payload_enc = body[:-2]
-            payload_dec = self._decrypt(payload_enc, header)
-            
-            # Parse
-            cmd_id = struct.unpack(">H", payload_dec[:2])[0]
-            data_len = struct.unpack(">H", payload_dec[2:4])[0]
-            data = payload_dec[4:4+data_len]
-            
-            # Update State
-            self.session_id = struct.unpack(">H", header[:2])[0]
-            self.rx_seq = struct.unpack(">I", header[2:6])[0] 
-            
-            # Identify Logic
-            if expected_cmd:
+        max_retries = 10  # Prevent infinite loops from garbage streams
+        for attempt in range(max_retries):
+            try:
+                # Header
+                header = await asyncio.wait_for(self.reader.readexactly(14), timeout=timeout)
+                
+                # Length
+                length = struct.unpack(">H", header[12:14])[0]
+                remaining = length - 14
+                
+                body = await asyncio.wait_for(self.reader.readexactly(remaining), timeout=timeout)
+                
+                # Decrypt
+                payload_enc = body[:-2]
+                payload_dec = self._decrypt(payload_enc, header)
+                
+                # Parse
+                cmd_id = struct.unpack(">H", payload_dec[:2])[0]
+                data_len = struct.unpack(">H", payload_dec[2:4])[0]
+                data = payload_dec[4:4+data_len]
+                
+                # Update State
+                self.session_id = struct.unpack(">H", header[:2])[0]
+                self.rx_seq = struct.unpack(">I", header[2:6])[0] 
+                
+                # If no specific command expected, return whatever we got
+                if not expected_cmd:
+                    return {'command': cmd_id, 'data': data}
+                
+                # If this is what we wanted, return it
                 if cmd_id == expected_cmd:
                     return {'command': cmd_id, 'data': data}
-                elif cmd_id in [0x0102, 0x0105, 0x0107, 0x0013]: # Event, Input/Device Changed, Poll Alive
-                    # _LOGGER.debug(f"Ignoring Async Event: 0x{cmd_id:04x}")
-                    # Recursive call to wait for next packet
-                    return await self._recv_response(expected_cmd, timeout)
-                else:
-                    _LOGGER.warning(f"Received unexpected cmd: 0x{cmd_id:04x} (Wanted 0x{expected_cmd:04x})")
-                    return {'command': cmd_id, 'data': data}
-            
-            return {'command': cmd_id, 'data': data}
-            
-        except asyncio.TimeoutError:
-            _LOGGER.warning("Receive Timeout")
-            return None
-        except Exception as e:
-            _LOGGER.error(f"Recv Failed: {e}")
-            return None
+                
+                # Otherwise skip it and try again
+                _LOGGER.debug(f"Skipping unexpected cmd 0x{cmd_id:04x} (waiting for 0x{expected_cmd:04x}), attempt {attempt+1}")
+                continue
+                
+            except asyncio.TimeoutError:
+                _LOGGER.warning(f"Receive Timeout (waiting for 0x{expected_cmd:04x})" if expected_cmd else "Receive Timeout")
+                return None
+            except Exception as e:
+                _LOGGER.error(f"Recv Failed: {e}")
+                return None
+        
+        _LOGGER.warning(f"Gave up waiting for 0x{expected_cmd:04x} after {max_retries} unexpected responses")
+        return None
+
 
     async def get_status(self):
         async with self._transaction_lock:
