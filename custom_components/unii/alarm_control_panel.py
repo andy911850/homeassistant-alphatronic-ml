@@ -141,11 +141,15 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         raw_code = entry.data.get(CONF_USER_CODE)
         self._user_code = str(raw_code).strip() if raw_code else None
         
+        # DEBUGGING: Log actual data availability
         if self._user_code:
-             _LOGGER.debug(f"UniiMasterAlarm: Stored user code found (Length {len(self._user_code)})")
-             self._attr_code_format = None # Hint to HA logic
+             _LOGGER.info(f"UniiMasterAlarm: Success! User Code found (Length {len(self._user_code)}). Keypad will be HIDDEN.")
+             self._attr_code_format = None
         else:
-             _LOGGER.debug("UniiMasterAlarm: No stored user code found (or empty).")
+             _LOGGER.warning(f"UniiMasterAlarm: User Code NOT found in config.")
+             _LOGGER.warning(f"DEBUG DATA KEYS: {list(entry.data.keys())}")
+             _LOGGER.warning(f"DEBUG OPTIONS KEYS: {list(entry.options.keys())}")
+             _LOGGER.warning(f"Is 'user_code' present? {'user_code' in entry.data}")
              self._attr_code_format = CodeFormat.NUMBER
 
     @property
