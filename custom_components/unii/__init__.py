@@ -55,6 +55,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Fetch data from Unii."""
         try:
             if not await client.connect():
+                # Force reconnect on next try
+                await client.disconnect()
                 raise UpdateFailed("Failed to connect to Unii panel")
             
             # Retry fetching arrangement if missing
@@ -69,52 +71,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             section_resp = await client.get_status()
             input_resp = await client.get_input_status()
             
+            if not section_resp and not input_resp:
+                # Both failed — connection is probably dead
+                _LOGGER.warning("Both status polls returned None. Forcing reconnect.")
+                await client.disconnect()
+                raise UpdateFailed("No response from panel")
+            
             data = {"sections": {}, "inputs": {}}
             
             if section_resp and section_resp.get("command") == 0x0117:
                 raw_data = section_resp["data"]
-                # ML Protocol detection: 
-                # If raw_data looks like Version(1) + [Status(1) + Padding(1)]...
-                # Iterate with stride 2, skipping version?
-                # Raw: 01 02 ff 02 ff...
-                # Skip version (index 0)
                 offset = 1
                 section_idx = 1
                 while offset + 1 < len(raw_data):
                     s_state = raw_data[offset]
-                    # padding = raw_data[offset+1] # usually 0xFF or 0x00
                     data["sections"][section_idx] = s_state
                     section_idx += 1
                     offset += 2
             
             if input_resp and input_resp.get("command") == 0x0105:
                 raw_data = input_resp["data"]
-                # ML Protocol: Header(2) + [Status(1) + Suffix(1)]...
-                # Raw: 00 01 00 0f 00 0f...
-                # Skip Header (index 0-1)
                 offset = 2
                 input_idx = 1
                 
                 while offset + 1 < len(raw_data):
                     status_byte = raw_data[offset]
-                    # suffix = raw_data[offset+1] # usually 0x0F
-                    
-                    # Look up arrangement
                     info = coordinator.input_arrangement.get(input_idx)
                     
                     if info:
                          stype = info.get("sensor_type", 0)
-                         # Filter Types 0, 8, 9 if needed?
-                         # For now trusting arrangement exists check.
-                         
                          status = status_byte & 0x0F
-                         # Only filter if status is literally "Disabled" (0x0F)?
-                         # If suffix is 0x0F, don't confuse it with status.
-                         # But status 0x00 is Closed?
                          
                          data["inputs"][input_idx] = {
                             "status": status,
-                            "bypassed": bool(status_byte & 0x10), # Guessing flags same
+                            "bypassed": bool(status_byte & 0x10),
                             "low_battery": bool(status_byte & 0x40),
                             "name": info.get("name", f"Input {input_idx}"),
                             "sensor_type": stype,
@@ -124,7 +114,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     offset += 2
             
             return data
+        except UpdateFailed:
+            raise
         except Exception as err:
+            # Force reconnect on unexpected errors
+            await client.disconnect()
             raise UpdateFailed(f"Error communicating with API: {err}")
 
     coordinator = DataUpdateCoordinator(
@@ -155,6 +149,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
-        await coordinator.update_method.__self__.__dict__['client'].disconnect() # Clean up
+        if hasattr(coordinator, 'client'):
+            await coordinator.client.disconnect()
 
     return unload_ok
