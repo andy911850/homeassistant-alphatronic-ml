@@ -35,10 +35,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities = []
     if coordinator.data and "inputs" in coordinator.data:
         for input_id, record in coordinator.data["inputs"].items():
-            # Only create bypass switches for Burglary (1) or Glassbreak (15)
-            stype = record.get("sensor_type")
-            if stype in [1, 15]: 
-                entities.append(UniiBypassSwitch(coordinator, input_id))
+            # Allow bypassing ALL sensor types (including Type 0)
+            # stype = record.get("sensor_type")
+            # if stype in [1, 15]: 
+            entities.append(UniiBypassSwitch(coordinator, input_id))
             
     async_add_entities(entities)
 
