@@ -16,6 +16,7 @@
 #
 """Switch platform for Unii alarm system bypassing."""
 import logging
+import asyncio
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
@@ -103,6 +104,8 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
             except Exception as e:
                 _LOGGER.error(f"Failed to bypass input {self._input_id}: {e}")
 
+        # Wait for panel to process state change
+        await asyncio.sleep(1.0)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -144,4 +147,6 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
             except Exception as e:
                 _LOGGER.error(f"Failed to unbypass input {self._input_id}: {e}")
 
+        # Wait for panel to process state change
+        await asyncio.sleep(1.0)
         await self.coordinator.async_request_refresh()
