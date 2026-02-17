@@ -324,8 +324,9 @@ class UniiClient:
     async def _control_section(self, section_id: int, user_code: str, cmd_req: int, cmd_resp: int) -> bool:
         """Generic section control."""
         async with self._transaction_lock:
-            # Payload: 0x00 + BCD Code + 1-Byte Section ID
-            payload = bytearray([0x00]) + self._bcd_encode(user_code) + struct.pack("B", section_id)
+            # Payload: 0x00 + BCD Code + 1-Byte Section ID + 0x01
+            # Format matches official py-unii library (UNiiArmDisarmSection.to_bytes)
+            payload = bytearray([0x00]) + self._bcd_encode(user_code) + section_id.to_bytes(1, 'big') + b'\x01'
             if await self._send_command(cmd_req, payload):
                 resp = await self._recv_response(expected_cmd=cmd_resp)
                 return resp is not None

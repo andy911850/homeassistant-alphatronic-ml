@@ -134,10 +134,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         # Status is at byte_pos + 1
                         status_byte = raw_data[byte_pos + 1]
                         
-                        # Bit 0 = State (Open/Closed)? No, usually lower nibble.
-                        # Based on observation: 00=Closed, 01=Open? 
-                        # Let's trust the byte value for "status" attribute.
-                        
+                        # Filter disabled/unused inputs (0x0F)
+                        if (status_byte & 0x0F) == 0x0F:
+                            continue
+
                         data["inputs"][input_idx] = {
                             "status": status_byte & 0x0F, # Lower nibble as state
                             "bypassed": bool(status_byte & 0x10), # Bit 4
