@@ -143,8 +143,7 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             result = await client.disarm_section(self.section_id, use_code)
             _LOGGER.warning(f"Disarm section {self.section_id} result: {result}")
             
-            # Check for success (result byte == 0x01)
-            if result and result.get("data") and len(result["data"]) >= 2 and result["data"][1] == 0x01:
+            if result:
                 _set_override(self.section_id, 2)  # 2 = disarmed
         
         # Force UI update
@@ -165,8 +164,7 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             result = await client.arm_section(self.section_id, use_code)
             _LOGGER.warning(f"Arm section {self.section_id} result: {result}")
             
-            # Check for success (result byte == 0x01)
-            if result and result.get("data") and len(result["data"]) >= 2 and result["data"][1] == 0x01:
+            if result:
                 _set_override(self.section_id, 1)  # 1 = armed
         
         # Force UI update
@@ -246,7 +244,7 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.warning(f"Master: Disarming section {sid}...")
                 result = await client.disarm_section(sid, use_code)
                 _LOGGER.warning(f"Master: Disarm section {sid} result: {result}")
-                if result and result.get("data") and len(result["data"]) >= 2 and result["data"][1] == 0x01:
+                if result:
                     _set_override(sid, 2)  # 2 = disarmed
         
         self.async_write_ha_state()
@@ -266,7 +264,7 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.warning(f"Master: Arming section {sid}...")
                 result = await client.arm_section(sid, use_code)
                 _LOGGER.warning(f"Master: Arm section {sid} result: {result}")
-                if result and result.get("data") and len(result["data"]) >= 2 and result["data"][1] == 0x01:
+                if result:
                     _set_override(sid, 1)  # 1 = armed
         
         self.async_write_ha_state()

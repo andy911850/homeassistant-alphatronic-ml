@@ -313,7 +313,20 @@ class UniiClient:
                 return await self._recv_response(expected_cmd=cmd_resp)
             return None
 
-    # Legacy Arm/Disarm support (if used by alarm_control_panel.py)
-    async def arm_section(self, section_id, user_code):
-         # ... implementation ...
-         pass # Assume not changed or similar logic
+    async def arm_section(self, section_id: int, user_code: str) -> bool:
+        """Arm a section."""
+        return await self._control_section(section_id, user_code, 0x0112, 0x0113)
+
+    async def disarm_section(self, section_id: int, user_code: str) -> bool:
+        """Disarm a section."""
+        return await self._control_section(section_id, user_code, 0x0114, 0x0115)
+
+    async def _control_section(self, section_id: int, user_code: str, cmd_req: int, cmd_resp: int) -> bool:
+        """Generic section control."""
+        async with self._transaction_lock:
+            # Payload: 0x00 + BCD Code + 1-Byte Section ID
+            payload = bytearray([0x00]) + self._bcd_encode(user_code) + struct.pack("B", section_id)
+            if await self._send_command(cmd_req, payload):
+                resp = await self._recv_response(expected_cmd=cmd_resp)
+                return resp is not None
+            return False
