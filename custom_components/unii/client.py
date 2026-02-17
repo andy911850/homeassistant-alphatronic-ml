@@ -292,9 +292,8 @@ class UniiClient:
                         items_in_block += 1
                     
                     if items_in_block == 0:
-                        # Block had no records at all — we've passed the end
-                        _LOGGER.debug(f"Block {block} had no records, stopping.")
-                        break
+                        # Block had no records, but we continue to the next block (up to safety limit)
+                        _LOGGER.debug(f"Block {block} empty, continuing...")
                     
                     _LOGGER.debug(f"Block {block}: {items_in_block} records parsed, {len(inputs)} total inputs.")
                 else:
