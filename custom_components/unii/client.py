@@ -245,8 +245,8 @@ class UniiClient:
         async with self._transaction_lock:
             while True:
                 block += 1
-                if block > 20:  # Safety limit
-                    _LOGGER.warning("Max input blocks (20) reached, stopping.")
+                if block > 100:  # Safety limit (100 blocks * 44 inputs = 4400 inputs)
+                    _LOGGER.warning("Max input blocks (100) reached, stopping.")
                     break
                 
                 payload = struct.pack(">H", block)
