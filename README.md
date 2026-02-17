@@ -57,7 +57,7 @@ If you see a "Connection failed" error:
 If you cannot toggle bypass switches:
 1.  Ensure you have entered a **User Code** in the integration configuration.
 2.  Update to **v1.6.5+** which fixes event race conditions and supports standard protocol formats.
-3.  **Check User Level**: The User Code must belong to a user with **Level 7 (Manager)** or higher permissions. Standard users cannot bypass inputs.
+3.  **Check User Code Length**: Due to a known firmware bug, the User Code must be exactly **6 digits** long to bypass inputs. 4-digit codes may fail. (User Level 5 is sufficient).
 
 ## Acknowledgments & License
 
