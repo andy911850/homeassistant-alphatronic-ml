@@ -77,84 +77,83 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         async with operation_lock:
             try:
-                # Maintain persistent connection
+                # 1. Maintain Connection
                 if not client._connected or not client.writer:
-                    _LOGGER.debug(f"Poll #{poll_num}: Reconnecting...")
-                    await client.disconnect()
+                    _LOGGER.debug(f"Poll #{poll_num}: Connecting...")
                     if not await client.connect():
                         raise UpdateFailed("Failed to connect to Unii panel")
-                
-                # Poll Section Status
+
+                # 2. Poll Sections
                 section_resp = await client.get_status()
-                
                 if not section_resp:
-                    _LOGGER.warning(f"Poll #{poll_num}: Section poll returned None, reconnecting next time.")
-                    await client.disconnect() # Force reconnect next time
-                    raise UpdateFailed("No section response from panel")
-                
+                    _LOGGER.warning(f"Poll #{poll_num}: Section poll failed. Reconnecting next time.")
+                    await client.disconnect()
+                    raise UpdateFailed("No section response")
+
+                # 3. Poll Inputs
+                input_resp = await client.get_input_status()
+                # Note: We continue even if input poll fails, to at least return section data?
+                # No, standard behavior is strict. If input poll fails, we might have partial state.
+                # Let's be strict for now.
+                if not input_resp:
+                     _LOGGER.warning(f"Poll #{poll_num}: Input poll failed.")
+                     raise UpdateFailed("No input response")
+
                 data = {"sections": {}, "inputs": {}}
-                
+
+                # 4. Parse Sections
                 if section_resp.get("command") == 0x0117:
                     raw_data = section_resp["data"]
                     offset = 1
                     section_idx = 1
                     while offset + 1 < len(raw_data):
-                        s_state = raw_data[offset]
-                        data["sections"][section_idx] = s_state
+                        data["sections"][section_idx] = raw_data[offset]
                         section_idx += 1
                         offset += 2
-                    
-                    if poll_num <= 5 or poll_num % 600 == 0: # Log every 5 mins approx
-                        _LOGGER.debug(f"Poll #{poll_num}: Sections={data['sections']} RAW_HEX={raw_data.hex()}")
-                else:
-                    _LOGGER.debug(f"Poll #{poll_num}: Unexpected response 0x{section_resp.get('command', 0):04x}")
-
-                # Poll Input Status (best effort)
-                # Only include inputs that have arrangement data (real zones)
-                try:
-                    input_resp = await client.get_input_status()
-                    if input_resp and input_resp.get("command") == 0x0105:
-                        raw_data = input_resp["data"]
-                        
-                        # Log raw input data occasionally for debug
-                        if poll_num <= 5 or poll_num % 600 == 0:
-                            _LOGGER.debug(f"Poll #{poll_num}: Inputs RAW_HEX={raw_data.hex()}")
-
-                        offset = 2
-                        input_idx = 1
-                        while offset + 1 < len(raw_data):
-                            # Logs show status is in the second byte (00 01 = Open, 00 00 = Closed)
-                            status_byte = raw_data[offset+1]
-                            status = status_byte & 0x0F
-                            
-                            # Only include inputs with arrangement data (skip VRIJE TEKST etc.)
-                            arr_info = input_arrangement.get(input_idx)
-                            if arr_info:
-                                name = arr_info.get("name", f"Input {input_idx}")
-                                is_open = (status & 0x01) == 0x01
-                                
-                                # Log state for first few inputs to check bitmask (debug only)
-                                if input_idx <= 3 and (poll_num <= 5 or poll_num % 600 == 0):
-                                     _LOGGER.debug(f"  Input {input_idx} ({name}): StatusByte={status_byte:02x} State={status} Open={is_open}")
-
-                                data["inputs"][input_idx] = {
-                                    "status": status,
-                                    "bypassed": bool(status_byte & 0x10),
-                                    "low_battery": bool(status_byte & 0x40),
-                                    "name": name,
-                                    "sensor_type": arr_info.get("sensor_type", 0),
-                                }
-                            input_idx += 1
-                            offset += 2
-                except Exception as e:
-                    _LOGGER.debug(f"Poll #{poll_num}: Input poll failed (non-fatal): {e}")
                 
+                # 5. Parse Inputs
+                # Command 0x0105: Version(1)|Reserved(1)|[Byte1(Stat)][Byte2(Reserved?)]...
+                if input_resp.get("command") == 0x0105:
+                    raw_data = input_resp["data"]
+                    offset = 2
+                    
+                    # Iterate over known inputs from arrangement
+                    # This is O(N) where N is number of inputs.
+                    # Flattened arrangement loop is safer than while loop on raw_data 
+                    # because we can enforce input_idx alignment.
+                    
+                    # However, raw_data is linear.
+                    # Input 1 is always at offset 2. Input 2 at offset 4.
+                    
+                    for input_idx, arr_info in input_arrangement.items():
+                        byte_pos = 2 + (input_idx - 1) * 2
+                        
+                        if byte_pos + 1 >= len(raw_data):
+                            break
+                            
+                        # Status is at byte_pos + 1
+                        status_byte = raw_data[byte_pos + 1]
+                        
+                        # Bit 0 = State (Open/Closed)? No, usually lower nibble.
+                        # Based on observation: 00=Closed, 01=Open? 
+                        # Let's trust the byte value for "status" attribute.
+                        
+                        data["inputs"][input_idx] = {
+                            "status": status_byte & 0x0F, # Lower nibble as state
+                            "bypassed": bool(status_byte & 0x10), # Bit 4
+                            "low_battery": bool(status_byte & 0x40), # Bit 6 (Guess)
+                            "name": arr_info["name"],
+                            "sensor_type": arr_info.get("sensor_type", 0)
+                        }
+
                 return data
+
             except UpdateFailed:
                 raise
             except Exception as err:
+                _LOGGER.error(f"Poll #{poll_num} error: {err}")
                 await client.disconnect()
-                raise UpdateFailed(f"Poll #{poll_num}: Error: {err}")
+                raise UpdateFailed(f"Poll error: {err}")
 
     coordinator = DataUpdateCoordinator(
         hass,
