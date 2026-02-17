@@ -1,6 +1,6 @@
 # Alphatronics ML / UNii (Custom Component)
 
-This is a specialized Home Assistant integration designed for **Alphatronics ML** and **UNii** alarm systems. 
+This is a specialized Home Assistant integration designed for **Alphatronics ML** alarm systems. 
 It communicates via the local network (Port 6502) using a reverse-engineered binary protocol, specifically optimized for the **ML Series** panels.
 
 **Current Version: v2.0.3**
