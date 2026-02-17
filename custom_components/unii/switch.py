@@ -104,9 +104,15 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
             except Exception as e:
                 _LOGGER.error(f"Failed to bypass input {self._input_id}: {e}")
 
-        # Wait for panel to process state change
-        await asyncio.sleep(1.0)
-        await self.coordinator.async_request_refresh()
+        # Optimistic Update
+        # We assume success means it IS bypassed.
+        if self.coordinator.data and "inputs" in self.coordinator.data:
+             if self._input_id in self.coordinator.data["inputs"]:
+                 self.coordinator.data["inputs"][self._input_id]["bypassed"] = True
+                 self.async_write_ha_state()
+
+        # Schedule a refresh to confirm (no delay needed if optimistic)
+        self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Unbypass the input."""
@@ -147,6 +153,10 @@ class UniiBypassSwitch(CoordinatorEntity, SwitchEntity):
             except Exception as e:
                 _LOGGER.error(f"Failed to unbypass input {self._input_id}: {e}")
 
-        # Wait for panel to process state change
-        await asyncio.sleep(1.0)
-        await self.coordinator.async_request_refresh()
+        # Optimistic Update
+        if self.coordinator.data and "inputs" in self.coordinator.data:
+             if self._input_id in self.coordinator.data["inputs"]:
+                 self.coordinator.data["inputs"][self._input_id]["bypassed"] = False
+                 self.async_write_ha_state()
+
+        self.coordinator.async_request_refresh()

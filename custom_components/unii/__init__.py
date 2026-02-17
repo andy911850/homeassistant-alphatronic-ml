@@ -77,18 +77,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         async with operation_lock:
             try:
-                # Force fresh connection — panel returns stale data on persistent connections
-                await client.disconnect()
-                
-                if not await client.connect():
-                    raise UpdateFailed("Failed to connect to Unii panel")
+                # Maintain persistent connection
+                if not client._connected or not client.writer:
+                    _LOGGER.debug(f"Poll #{poll_num}: Reconnecting...")
+                    await client.disconnect()
+                    if not await client.connect():
+                        raise UpdateFailed("Failed to connect to Unii panel")
                 
                 # Poll Section Status
                 section_resp = await client.get_status()
                 
                 if not section_resp:
-                    _LOGGER.warning(f"Poll #{poll_num}: Section poll returned None")
-                    await client.disconnect()
+                    _LOGGER.warning(f"Poll #{poll_num}: Section poll returned None, reconnecting next time.")
+                    await client.disconnect() # Force reconnect next time
                     raise UpdateFailed("No section response from panel")
                 
                 data = {"sections": {}, "inputs": {}}
