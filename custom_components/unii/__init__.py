@@ -102,15 +102,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                 data = {"sections": {}, "inputs": {}}
 
-                # 4. Parse Sections
+                # 4. Parse Sections (pairs of section_number, armed_state)
                 if section_resp.get("command") == 0x0117:
                     raw_data = section_resp["data"]
-                    offset = 1
-                    section_idx = 1
-                    while offset + 1 < len(raw_data):
-                        data["sections"][section_idx] = raw_data[offset]
-                        section_idx += 1
-                        offset += 2
+                    for i in range(0, len(raw_data), 2):
+                        if i + 1 < len(raw_data):
+                            section_num = raw_data[i]
+                            section_state = raw_data[i + 1]
+                            if section_num != 0xFF:  # Skip filler/not-programmed
+                                data["sections"][section_num] = section_state
                 
                 # 5. Parse Inputs
                 # Command 0x0105: Version(1)|Reserved(1)|[Byte1(Stat)][Byte2(Reserved?)]...

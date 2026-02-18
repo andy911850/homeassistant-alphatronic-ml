@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 import logging
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
@@ -31,31 +30,29 @@ SECTION_STATE_MAP = {
 }
 
 # Optimistic state overrides — trust arm/disarm command results
-# Format: {section_id: (state_value, timestamp)}
-# Overrides are valid for 30 seconds
+# For sections NOT in poll data (e.g. Section 2), overrides persist indefinitely.
+# For sections IN poll data, the polled value takes priority.
+# Format: {section_id: state_value}
 _state_overrides = {}
-_OVERRIDE_TTL = 30  # seconds
 
 
 def _set_override(section_id: int, state_value: int):
     """Set an optimistic state override for a section."""
-    _state_overrides[section_id] = (state_value, time.time())
-    _LOGGER.warning(f"Set optimistic override: section {section_id} = {state_value} ({SECTION_STATE_MAP.get(state_value)})")
+    _state_overrides[section_id] = state_value
+    _LOGGER.warning(f"Set state override: section {section_id} = {state_value} ({SECTION_STATE_MAP.get(state_value)})")
 
 
-def _get_effective_state(section_id: int, polled_value: int) -> int:
-    """Get effective state, preferring fresh overrides over poll data."""
-    if section_id in _state_overrides:
-        override_value, override_time = _state_overrides[section_id]
-        age = time.time() - override_time
-        if age < _OVERRIDE_TTL:
-            if override_value != polled_value:
-                _LOGGER.debug(f"Section {section_id}: using override {override_value} (age={age:.0f}s) over polled {polled_value}")
-            return override_value
-        else:
-            # Override expired, remove it
+def _get_effective_state(section_id: int, polled_value) -> int:
+    """Get effective state. Poll data wins when available, otherwise use override."""
+    if polled_value is not None:
+        # Poll has data for this section — clear override and use polled value
+        if section_id in _state_overrides:
             del _state_overrides[section_id]
-    return polled_value
+        return polled_value
+    # No poll data — use override if available
+    if section_id in _state_overrides:
+        return _state_overrides[section_id]
+    return 2  # Default: disarmed
 
 
 async def async_setup_entry(
@@ -115,10 +112,8 @@ class UniiAlarm(CoordinatorEntity, AlarmControlPanelEntity):
             return None
             
         polled_state = self.coordinator.data["sections"].get(self.section_id)
-        if polled_state is None:
-            return None
         
-        # Use optimistic override if available and fresh
+        # _get_effective_state handles None polled_state (uses override if available)
         effective_state = _get_effective_state(self.section_id, polled_state)
         
         mapped = SECTION_STATE_MAP.get(effective_state)
@@ -211,9 +206,8 @@ class UniiMasterAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         states = []
         for sid in self.section_ids:
             polled = self.coordinator.data["sections"].get(sid)
-            if polled is not None:
-                effective = _get_effective_state(sid, polled)
-                states.append(effective)
+            effective = _get_effective_state(sid, polled)
+            states.append(effective)
         
         if not states:
             return None
