@@ -250,7 +250,8 @@ class UniiClient:
                 self.rx_seq = struct.unpack(">I", header[2:6])[0] 
                 
                 # Log ALL received commands for diagnostics
-                _LOGGER.warning(f"RECV cmd=0x{cmd_id:04x} data_len={data_len} data={data.hex() if data else 'empty'} (expecting 0x{expected_cmd:04x} if set)")
+                expected_str = f"0x{expected_cmd:04x}" if expected_cmd is not None else "any"
+                _LOGGER.warning(f"RECV cmd=0x{cmd_id:04x} data_len={data_len} data={data.hex() if data else 'empty'} (expecting {expected_str})")
                 
                 if not expected_cmd or cmd_id == expected_cmd:
                     return {'command': cmd_id, 'data': data}
