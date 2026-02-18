@@ -39,24 +39,25 @@ _state_overrides = {}
 def _set_override(section_id: int, state_value: int):
     """Set an optimistic state override for a section."""
     _state_overrides[section_id] = state_value
-    _LOGGER.warning(f"Set state override: section {section_id} = {state_value} ({SECTION_STATE_MAP.get(state_value)})")
+    _LOGGER.warning(f"OVERRIDE SET: section {section_id} = {state_value} ({SECTION_STATE_MAP.get(state_value)}), all overrides now: {dict(_state_overrides)}")
 
 
 def _get_effective_state(section_id: int, polled_value) -> int:
-    """Get effective state. Poll data wins when available, otherwise use override.
-    
-    Overrides are NOT cleared when polled data is available — they persist as
-    fallback for future polls where the section may not appear in raw data.
-    Overrides are only replaced by new _set_override() calls (arm/disarm commands
-    or section state change events).
-    """
+    """Get effective state. Poll data wins when available, otherwise use override."""
+    override_val = _state_overrides.get(section_id)
     if polled_value is not None:
-        # Poll has data for this section — use it, but keep override as fallback
-        return polled_value
-    # No poll data — use override if available
-    if section_id in _state_overrides:
-        return _state_overrides[section_id]
-    return 2  # Default: disarmed
+        result = polled_value
+        source = "POLL"
+    elif override_val is not None:
+        result = override_val
+        source = "OVERRIDE"
+    else:
+        result = 2
+        source = "DEFAULT"
+    
+    mapped = SECTION_STATE_MAP.get(result, f"UNKNOWN({result})")
+    _LOGGER.warning(f"STATE section={section_id}: {source} -> value={result} ({mapped}) [polled={polled_value}, override={override_val}, all_overrides={dict(_state_overrides)}]")
+    return result
 
 
 async def async_setup_entry(

@@ -105,12 +105,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 # 4. Parse Sections (pairs of section_number, armed_state)
                 if section_resp.get("command") == 0x0117:
                     raw_data = section_resp["data"]
+                    _LOGGER.warning(f"Poll #{poll_num} RAW section data: {raw_data.hex()} ({len(raw_data)} bytes)")
                     for i in range(0, len(raw_data), 2):
                         if i + 1 < len(raw_data):
                             section_num = raw_data[i]
                             section_state = raw_data[i + 1]
                             if section_num != 0xFF:  # Skip filler/not-programmed
                                 data["sections"][section_num] = section_state
+                                _LOGGER.warning(f"  Parsed: section {section_num} = state {section_state}")
+                            else:
+                                _LOGGER.debug(f"  Skipped filler at offset {i}")
+                
+                _LOGGER.warning(f"Poll #{poll_num} SECTIONS from poll: {data['sections']}")
                 
                 # 4b. Merge section state change events (physical keypad arm/disarm)
                 if client.section_state_events:
