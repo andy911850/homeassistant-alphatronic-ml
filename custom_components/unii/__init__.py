@@ -112,6 +112,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             if section_num != 0xFF:  # Skip filler/not-programmed
                                 data["sections"][section_num] = section_state
                 
+                # 4b. Merge section state change events (physical keypad arm/disarm)
+                if client.section_state_events:
+                    from .alarm_control_panel import _set_override
+                    for sec_num, sec_state in client.section_state_events.items():
+                        data["sections"][sec_num] = sec_state
+                        _set_override(sec_num, sec_state)
+                        _LOGGER.warning(f"Applied section event: section={sec_num} state={sec_state}")
+                    client.section_state_events.clear()
+
                 # 5. Parse Inputs
                 # Command 0x0105: Version(1)|Reserved(1)|[Byte1(Stat)][Byte2(Reserved?)]...
                 if input_resp.get("command") == 0x0105:

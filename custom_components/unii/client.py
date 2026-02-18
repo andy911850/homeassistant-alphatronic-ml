@@ -39,6 +39,9 @@ class UniiClient:
         self._connected = False
         self._lock = asyncio.Lock()
         self._transaction_lock = asyncio.Lock()
+        # Captures SECTION_ARMED_STATE_CHANGED (0x0119) events from the panel
+        # Format: {section_number: armed_state}
+        self.section_state_events: Dict[int, int] = {}
         
     async def connect(self) -> bool:
         """Establish connection to the panel and perform handshake."""
@@ -248,6 +251,13 @@ class UniiClient:
                 
                 if not expected_cmd or cmd_id == expected_cmd:
                     return {'command': cmd_id, 'data': data}
+                
+                # Capture section state change events (e.g. physical keypad arm/disarm)
+                if cmd_id == 0x0119 and len(data) >= 2:
+                    section_num = data[0]
+                    section_state = data[1]
+                    self.section_state_events[section_num] = section_state
+                    _LOGGER.warning(f"Section state event: section={section_num} state={section_state}")
                 
                 _LOGGER.debug(f"Skipping unexpected cmd 0x{cmd_id:04x} (waiting for 0x{expected_cmd:04x})")
                 continue
