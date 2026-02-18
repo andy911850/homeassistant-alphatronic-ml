@@ -260,7 +260,9 @@ class UniiClient:
                     section_num = data[0]
                     section_state = data[1]
                     self.section_state_events[section_num] = section_state
-                    _LOGGER.warning(f"EVENT CAPTURED: Section state change: section={section_num} state={section_state}")
+                    _LOGGER.warning(f"EVENT CAPTURED: Section state change (0x0119): section={section_num} state={section_state}")
+                elif cmd_id == 0x0102:
+                    self._process_event_0102(data)
                 
                 _LOGGER.warning(f"Skipping unexpected cmd 0x{cmd_id:04x} (waiting for 0x{expected_cmd:04x})")
                 continue
@@ -275,6 +277,38 @@ class UniiClient:
                 return None
         
         return None
+
+    def _process_event_0102(self, data: bytes):
+        """Parse 0x0102 event log (text-based state changes)."""
+        try:
+            if len(data) < 12:
+                return
+
+            # Byte 1 seems to be Section ID based on testing (0x02 for section 2)
+            section_num = data[1] 
+            
+            # Text starts at offset 10 based on sample data
+            # 00 02 00 1c 1a 02 12 0b 12 09 [Text...]
+            text_data = data[10:]
+            try:
+                # Use latin-1 to avoid decode errors on binary/garbage
+                text = text_data.decode("latin-1", errors="ignore")
+            except:
+                return
+
+            # Check keywords
+            new_state = None
+            if "INSCHAKELEN" in text:
+                new_state = 1 # Armed Away
+            elif "UITSCHAKELEN" in text:
+                new_state = 2 # Disarmed
+            
+            if new_state is not None:
+                self.section_state_events[section_num] = new_state
+                _LOGGER.warning(f"EVENT 0x0102 PARSED: section={section_num} state={new_state} text='{text.strip()}'")
+
+        except Exception as e:
+            _LOGGER.error(f"Error parsing 0x0102 event: {e}")
 
     async def get_status(self) -> Optional[Dict[str, Any]]:
         """Fetch status of all sections."""
@@ -295,8 +329,8 @@ class UniiClient:
     async def drain_events(self) -> int:
         """Non-blocking read of any buffered packets from the socket.
         
-        Captures events (like 0x0119 section state changes) that arrived
-        between polls. Returns the number of events captured.
+        Captures events (like 0x0119 or 0x0102) that arrived between polls.
+        Returns the number of events captured.
         """
         if not self.reader or not self._connected:
             return 0
@@ -339,7 +373,10 @@ class UniiClient:
                         section_num = data[0]
                         section_state = data[1]
                         self.section_state_events[section_num] = section_state
-                        _LOGGER.warning(f"DRAIN EVENT: Section state change: section={section_num} state={section_state}")
+                        _LOGGER.warning(f"DRAIN EVENT (0x0119): Section state change: section={section_num} state={section_state}")
+                        events_found += 1
+                    elif cmd_id == 0x0102:
+                        self._process_event_0102(data)
                         events_found += 1
                     
                 except asyncio.TimeoutError:
