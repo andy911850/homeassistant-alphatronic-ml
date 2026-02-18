@@ -43,11 +43,15 @@ def _set_override(section_id: int, state_value: int):
 
 
 def _get_effective_state(section_id: int, polled_value) -> int:
-    """Get effective state. Poll data wins when available, otherwise use override."""
+    """Get effective state. Poll data wins when available, otherwise use override.
+    
+    Overrides are NOT cleared when polled data is available — they persist as
+    fallback for future polls where the section may not appear in raw data.
+    Overrides are only replaced by new _set_override() calls (arm/disarm commands
+    or section state change events).
+    """
     if polled_value is not None:
-        # Poll has data for this section — clear override and use polled value
-        if section_id in _state_overrides:
-            del _state_overrides[section_id]
+        # Poll has data for this section — use it, but keep override as fallback
         return polled_value
     # No poll data — use override if available
     if section_id in _state_overrides:
