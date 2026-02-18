@@ -86,15 +86,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 # 2. Poll Sections
                 section_resp = await client.get_status()
                 if not section_resp:
-                    _LOGGER.warning(f"Poll #{poll_num}: Section poll failed. Reconnecting next time.")
+                    _LOGGER.warning(f"Poll #{poll_num}: Section poll failed. Reconnecting...")
                     await client.disconnect()
-                    raise UpdateFailed("No section response")
+                    # Retry once immediately
+                    if await client.connect():
+                        section_resp = await client.get_status()
+                    if not section_resp:
+                        raise UpdateFailed("No section response after retry")
 
                 # 3. Poll Inputs
                 input_resp = await client.get_input_status()
-                # Note: We continue even if input poll fails, to at least return section data?
-                # No, standard behavior is strict. If input poll fails, we might have partial state.
-                # Let's be strict for now.
                 if not input_resp:
                      _LOGGER.warning(f"Poll #{poll_num}: Input poll failed.")
                      raise UpdateFailed("No input response")

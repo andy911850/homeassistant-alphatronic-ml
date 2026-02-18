@@ -16,6 +16,7 @@
 #
 """Unii Client for Home Assistant (Refactored v2.0)."""
 import asyncio
+import socket
 import struct
 import binascii
 import logging
@@ -44,38 +45,71 @@ class UniiClient:
         async with self._lock:
             if self._connected and self.writer:
                 try:
-                    # Quick check if writer is still valid (not foolproof but helps)
                     if self.writer.is_closing():
                         raise ConnectionResetError
                     return True
                 except Exception:
                     self._connected = False
 
-            _LOGGER.info(f"Connecting to {self.ip}:{self.port}...")
-            try:
-                self.reader, self.writer = await asyncio.wait_for(
-                    asyncio.open_connection(self.ip, self.port), timeout=5
-                )
-                
-                # Handshake: Send 0x0001, Expect 0x0002
-                if await self._send_command(0x0001): 
-                    resp = await self._recv_response(expected_cmd=0x0002)
-                    if resp:
-                        _LOGGER.info("Connected and Authenticated!")
-                        self._connected = True
-                        return True
-                        
-                # Handshake failed
-                await self._close_socket()
-                return False
-            except Exception as e:
-                _LOGGER.error(f"Connection failed: {e}")
-                await self._close_socket()
-                return False
+            # Try connecting, with one retry if panel denies (stale slot)
+            for attempt in range(2):
+                _LOGGER.info(f"Connecting to {self.ip}:{self.port}... (attempt {attempt + 1})")
+                try:
+                    self.reader, self.writer = await asyncio.wait_for(
+                        asyncio.open_connection(self.ip, self.port), timeout=5
+                    )
+
+                    # Enable TCP keepalive to detect dead connections
+                    sock = self.writer.get_extra_info('socket')
+                    if sock:
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                        try:
+                            # Linux (where HA runs)
+                            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+                            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+                            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+                        except (AttributeError, OSError):
+                            try:
+                                # Windows fallback
+                                sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60000, 10000))
+                            except (AttributeError, OSError):
+                                pass  # Basic keepalive already enabled
+                        _LOGGER.debug("TCP keepalive enabled (60s idle, 10s interval)")
+
+                    # Handshake: Send 0x0001, accept any response
+                    if await self._send_command(0x0001):
+                        resp = await self._recv_response()  # Accept any cmd
+                        if resp:
+                            cmd = resp.get('command', 0)
+                            if cmd == 0x0002:
+                                _LOGGER.info("Connected and Authenticated!")
+                                self._connected = True
+                                return True
+                            elif cmd == 0x0003:
+                                _LOGGER.warning("Connection DENIED by panel (slot busy). Retrying in 3s...")
+                                await self._close_socket()
+                                await asyncio.sleep(3)
+                                continue
+                            else:
+                                _LOGGER.error(f"Unexpected handshake response: 0x{cmd:04x}")
+
+                    await self._close_socket()
+                except Exception as e:
+                    _LOGGER.error(f"Connection failed: {e}")
+                    await self._close_socket()
+
+            return False
 
     async def disconnect(self):
-        """Cleanly disconnect."""
+        """Cleanly disconnect with NORMAL_DISCONNECT."""
         async with self._lock:
+            # Send graceful disconnect so panel frees the connection slot
+            if self._connected and self.writer:
+                try:
+                    await self._send_command(0x0014)  # NORMAL_DISCONNECT
+                    await asyncio.sleep(0.2)  # Brief pause for panel to process
+                except Exception:
+                    pass
             await self._close_socket()
             _LOGGER.info("Disconnected.")
 
@@ -224,6 +258,7 @@ class UniiClient:
                 return None
             except Exception as e:
                 _LOGGER.exception(f"Unexpected Receive Error: {e}")
+                await self._close_socket()
                 return None
         
         return None
