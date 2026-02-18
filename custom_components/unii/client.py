@@ -250,8 +250,9 @@ class UniiClient:
                 self.rx_seq = struct.unpack(">I", header[2:6])[0] 
                 
                 # Log ALL received commands for diagnostics
+                # Log ALL received commands for diagnostics
                 expected_str = f"0x{expected_cmd:04x}" if expected_cmd is not None else "any"
-                _LOGGER.warning(f"RECV cmd=0x{cmd_id:04x} data_len={data_len} data={data.hex() if data else 'empty'} (expecting {expected_str})")
+                _LOGGER.debug(f"RECV cmd=0x{cmd_id:04x} data_len={data_len} data={data.hex() if data else 'empty'} (expecting {expected_str})")
                 
                 if not expected_cmd or cmd_id == expected_cmd:
                     return {'command': cmd_id, 'data': data}
@@ -261,11 +262,11 @@ class UniiClient:
                     section_num = data[0]
                     section_state = data[1]
                     self.section_state_events[section_num] = section_state
-                    _LOGGER.warning(f"EVENT CAPTURED: Section state change (0x0119): section={section_num} state={section_state}")
+                    _LOGGER.debug(f"EVENT CAPTURED: Section state change (0x0119): section={section_num} state={section_state}")
                 elif cmd_id == 0x0102:
                     self._process_event_0102(data)
                 
-                _LOGGER.warning(f"Skipping unexpected cmd 0x{cmd_id:04x} (waiting for 0x{expected_cmd:04x})")
+                _LOGGER.debug(f"Skipping unexpected cmd 0x{cmd_id:04x} (waiting for 0x{expected_cmd:04x})")
                 continue
                 
             except (asyncio.TimeoutError, ConnectionResetError, asyncio.IncompleteReadError) as e:
@@ -306,10 +307,10 @@ class UniiClient:
             
             if new_state is not None:
                 self.section_state_events[section_num] = new_state
-                _LOGGER.warning(f"EVENT 0x0102 PARSED: section={section_num} state={new_state} text='{text.strip()}'")
+                _LOGGER.debug(f"EVENT 0x0102 PARSED: section={section_num} state={new_state} text='{text.strip()}'")
 
         except Exception as e:
-            _LOGGER.error(f"Error parsing 0x0102 event: {e}")
+            _LOGGER.debug(f"Error parsing 0x0102 event: {e}")
 
     async def get_status(self) -> Optional[Dict[str, Any]]:
         """Fetch status of all sections."""
@@ -367,14 +368,14 @@ class UniiClient:
                     self.session_id = struct.unpack(">H", header[:2])[0]
                     self.rx_seq = struct.unpack(">I", header[2:6])[0]
                     
-                    _LOGGER.warning(f"DRAIN: Received cmd=0x{cmd_id:04x} data={data.hex() if data else 'empty'}")
+                    _LOGGER.debug(f"DRAIN: Received cmd=0x{cmd_id:04x} data={data.hex() if data else 'empty'}")
                     
                     # Capture section state change events
                     if cmd_id == 0x0119 and len(data) >= 2:
                         section_num = data[0]
                         section_state = data[1]
                         self.section_state_events[section_num] = section_state
-                        _LOGGER.warning(f"DRAIN EVENT (0x0119): Section state change: section={section_num} state={section_state}")
+                        _LOGGER.debug(f"DRAIN EVENT (0x0119): Section state change: section={section_num} state={section_state}")
                         events_found += 1
                     elif cmd_id == 0x0102:
                         self._process_event_0102(data)

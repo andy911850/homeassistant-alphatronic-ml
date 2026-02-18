@@ -62,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 for inp_id, inp_data in input_arrangement.items():
                     _LOGGER.info(f"  Zone {inp_id}: {inp_data.get('name', '?')}")
             else:
-                _LOGGER.warning("No input arrangement data received")
+                _LOGGER.debug("No input arrangement data received")
             await client.disconnect()
         else:
             _LOGGER.warning("Could not connect for arrangement download")
