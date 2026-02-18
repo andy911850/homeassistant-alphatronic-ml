@@ -83,6 +83,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     if not await client.connect():
                         raise UpdateFailed("Failed to connect to Unii panel")
 
+                # 1b. Drain any buffered events (e.g. keypad arm/disarm between polls)
+                drained = await client.drain_events()
+                if drained > 0:
+                    _LOGGER.warning(f"Poll #{poll_num}: Drained {drained} events from buffer")
+
                 # 2. Poll Sections
                 section_resp = await client.get_status()
                 if not section_resp:

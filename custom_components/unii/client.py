@@ -249,6 +249,9 @@ class UniiClient:
                 self.session_id = struct.unpack(">H", header[:2])[0]
                 self.rx_seq = struct.unpack(">I", header[2:6])[0] 
                 
+                # Log ALL received commands for diagnostics
+                _LOGGER.warning(f"RECV cmd=0x{cmd_id:04x} data_len={data_len} data={data.hex() if data else 'empty'} (expecting 0x{expected_cmd:04x} if set)")
+                
                 if not expected_cmd or cmd_id == expected_cmd:
                     return {'command': cmd_id, 'data': data}
                 
@@ -257,9 +260,9 @@ class UniiClient:
                     section_num = data[0]
                     section_state = data[1]
                     self.section_state_events[section_num] = section_state
-                    _LOGGER.warning(f"Section state event: section={section_num} state={section_state}")
+                    _LOGGER.warning(f"EVENT CAPTURED: Section state change: section={section_num} state={section_state}")
                 
-                _LOGGER.debug(f"Skipping unexpected cmd 0x{cmd_id:04x} (waiting for 0x{expected_cmd:04x})")
+                _LOGGER.warning(f"Skipping unexpected cmd 0x{cmd_id:04x} (waiting for 0x{expected_cmd:04x})")
                 continue
                 
             except (asyncio.TimeoutError, ConnectionResetError, asyncio.IncompleteReadError) as e:
@@ -288,6 +291,65 @@ class UniiClient:
             if await self._send_command(0x0106, b'\x02'):
                 return await self._recv_response(expected_cmd=0x0105)
             return None
+
+    async def drain_events(self) -> int:
+        """Non-blocking read of any buffered packets from the socket.
+        
+        Captures events (like 0x0119 section state changes) that arrived
+        between polls. Returns the number of events captured.
+        """
+        if not self.reader or not self._connected:
+            return 0
+        
+        events_found = 0
+        async with self._transaction_lock:
+            while True:
+                try:
+                    # Non-blocking check: is there data waiting?
+                    # Use a very short timeout to check for buffered data
+                    header_bytes = await asyncio.wait_for(
+                        self.reader.readexactly(14), timeout=0.1
+                    )
+                    header = bytearray(header_bytes)
+                    length = struct.unpack(">H", header[12:14])[0]
+                    
+                    if length < 16 or length > 4096:
+                        _LOGGER.error(f"drain_events: Invalid packet length: {length}")
+                        break
+                    
+                    remaining_bytes = length - 14
+                    body = await asyncio.wait_for(
+                        self.reader.readexactly(remaining_bytes), timeout=1
+                    )
+                    
+                    payload_enc = body[:-2]
+                    payload_dec = self._decrypt(payload_enc, header)
+                    
+                    cmd_id = struct.unpack(">H", payload_dec[:2])[0]
+                    data_len = struct.unpack(">H", payload_dec[2:4])[0]
+                    data = payload_dec[4:4+data_len]
+                    
+                    self.session_id = struct.unpack(">H", header[:2])[0]
+                    self.rx_seq = struct.unpack(">I", header[2:6])[0]
+                    
+                    _LOGGER.warning(f"DRAIN: Received cmd=0x{cmd_id:04x} data={data.hex() if data else 'empty'}")
+                    
+                    # Capture section state change events
+                    if cmd_id == 0x0119 and len(data) >= 2:
+                        section_num = data[0]
+                        section_state = data[1]
+                        self.section_state_events[section_num] = section_state
+                        _LOGGER.warning(f"DRAIN EVENT: Section state change: section={section_num} state={section_state}")
+                        events_found += 1
+                    
+                except asyncio.TimeoutError:
+                    # No more buffered data — normal exit
+                    break
+                except Exception as e:
+                    _LOGGER.warning(f"drain_events error: {e}")
+                    break
+        
+        return events_found
 
     async def get_input_arrangement(self) -> Dict[str, Dict]:
         """Fetch input arrangement (all blocks)."""
